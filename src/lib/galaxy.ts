@@ -62,6 +62,8 @@ const MIN_PLANET_SIZE = 0.55
 const MAX_PLANET_SIZE = 1.55
 const FIRST_ORBIT = SUN_RADIUS + 4.2
 const ORBIT_GAP = 2.6
+/** Radial span cap so 100 live repos don't outgrow the lights/fog/frustum. */
+const MAX_ORBIT_SPAN = 36
 /** Rigid-body rotation keeps constellation clusters coherent. */
 const BASE_ORBIT_SPEED = 0.02
 const ACTIVE_WINDOW_DAYS = 60
@@ -138,7 +140,9 @@ function buildMoons(repo: GalaxyRepo, planetSize: number, rand: () => number): M
     moons.push({
       kind,
       size: planetSize * (kind === 'star' ? 0.1 + rand() * 0.06 : 0.14 + rand() * 0.08),
-      orbitRadius: planetSize * (1.7 + i * 0.55 + rand() * 0.25),
+      // Kept within ~1 unit of the surface so neighboring repos' moon systems
+      // never interpenetrate (ring gap can shrink to ~1.8 with jitter).
+      orbitRadius: planetSize + 0.4 + Math.min(i * 0.28 + rand() * 0.15, 1.0),
       speed: 0.35 + rand() * 0.5,
       phase: rand() * Math.PI * 2,
       inclination: (rand() - 0.5) * 0.9,
@@ -168,6 +172,10 @@ export function buildGalaxy(data: GalaxyData): GalaxyLayout {
     grouped.set(id, list)
   }
 
+  // Linear ring spacing for small galaxies; compressed once the span would
+  // outgrow what the lighting, fog, and camera limits are tuned for.
+  const span = Math.min(ORBIT_GAP * Math.max(1, repos.length - 1), MAX_ORBIT_SPAN)
+
   const planets: PlanetSpec[] = []
   for (const [constellation, members] of grouped) {
     const meta = CONSTELLATIONS[constellation]
@@ -175,6 +183,7 @@ export function buildGalaxy(data: GalaxyData): GalaxyLayout {
     members.forEach((repo, slot) => {
       const rand = rng(hashString(repo.name))
       const rank = orbitRank.get(repo.name)!
+      const rankT = repos.length > 1 ? rank / (repos.length - 1) : 0
       const sizeT = Math.sqrt(repo.commits / maxCommits)
       const size = MIN_PLANET_SIZE + (MAX_PLANET_SIZE - MIN_PLANET_SIZE) * sizeT
       // Spread members across the sector; jitter keeps it organic.
@@ -186,9 +195,11 @@ export function buildGalaxy(data: GalaxyData): GalaxyLayout {
         biome: biomeFor(repo.language),
         constellation,
         size,
-        orbitRadius: FIRST_ORBIT + rank * ORBIT_GAP + (rand() - 0.5) * 0.8,
+        orbitRadius: FIRST_ORBIT + rankT * span + (rand() - 0.5) * 0.8,
         phase,
-        speed: BASE_ORBIT_SPEED * (0.95 + rand() * 0.1),
+        // Identical angular velocity for every planet: the disc rotates as a
+        // rigid body, so constellation clusters never drift apart.
+        speed: BASE_ORBIT_SPEED,
         inclination: (rand() - 0.5) * 0.24,
         active: daysSince(repo.pushedAt, now) <= ACTIVE_WINDOW_DAYS,
         highlight: HIGHLIGHT_REPOS.has(repo.name),

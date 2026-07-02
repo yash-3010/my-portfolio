@@ -75,6 +75,7 @@ button {
 
 .planet-label {
   pointer-events: none;
+  max-width: 200px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -201,16 +202,54 @@ button {
   pointer-events: none;
 }
 
-.hud a,
-.hud code {
+/* Only real links regain pointer events — inert text (e.g. the seed badge's
+   code snippet) must not block orbit drags. */
+.hud a {
   pointer-events: auto;
+}
+
+/* Keyboard path into the galaxy: hidden until a button receives focus. */
+.hud__nav {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  translate: -50% 0;
+  z-index: 5;
+  display: flex;
+  gap: 6px;
+  pointer-events: auto;
+}
+
+.hud__nav button {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  border: 0;
+  padding: 0;
+}
+
+.hud__nav button:focus-visible {
+  position: static;
+  width: auto;
+  height: auto;
+  overflow: visible;
+  clip-path: none;
+  padding: 8px 14px;
+  border-radius: 0 0 10px 10px;
+  background: rgba(10, 14, 32, 0.9);
+  border: 1px solid rgba(150, 170, 255, 0.35);
+  color: #e8ecff;
+  font-size: 12px;
+  cursor: pointer;
 }
 
 /* brand — top left */
 .hud__brand {
   position: absolute;
-  top: 28px;
-  left: 32px;
+  top: calc(28px + env(safe-area-inset-top, 0px));
+  left: calc(32px + env(safe-area-inset-left, 0px));
   max-width: 340px;
 }
 
@@ -291,7 +330,7 @@ button {
 /* hint pill — bottom center */
 .hud__hint {
   position: absolute;
-  bottom: 30px;
+  bottom: calc(30px + env(safe-area-inset-bottom, 0px));
   left: 50%;
   translate: -50% 0; /* keep `transform` free for framer-motion */
   padding: 9px 20px;
@@ -323,8 +362,8 @@ button {
 /* seed badge — bottom left */
 .hud__seed {
   position: absolute;
-  bottom: 26px;
-  left: 32px;
+  bottom: calc(26px + env(safe-area-inset-bottom, 0px));
+  left: calc(32px + env(safe-area-inset-left, 0px));
   padding: 6px 12px;
   border-radius: 8px;
   background: rgba(251, 191, 36, 0.08);
@@ -343,8 +382,8 @@ button {
 /* credit link — bottom right */
 .hud__credit {
   position: absolute;
-  bottom: 26px;
-  right: 32px;
+  bottom: calc(26px + env(safe-area-inset-bottom, 0px));
+  right: calc(32px + env(safe-area-inset-right, 0px));
   font-size: 11.5px;
   letter-spacing: 0.04em;
 }
@@ -362,12 +401,14 @@ button {
   border-color: rgba(232, 236, 255, 0.5);
 }
 
-/* focused state — fade out everything except the brand block */
+/* focused state — fade out everything except the brand block.
+   visibility drops the hidden chrome from the tab order / a11y tree so
+   keyboard focus never lands on an invisible link. */
 .hud__legend,
 .hud__hint,
 .hud__seed,
 .hud__credit {
-  transition: opacity 300ms ease;
+  transition: opacity 300ms ease, visibility 0s 0s;
 }
 
 .hud--focused .hud__legend,
@@ -375,11 +416,12 @@ button {
 .hud--focused .hud__seed,
 .hud--focused .hud__credit {
   opacity: 0 !important;
+  visibility: hidden;
+  transition: opacity 300ms ease, visibility 0s 300ms;
   pointer-events: none;
 }
 
-.hud--focused .hud__credit a,
-.hud--focused .hud__seed code {
+.hud--focused .hud__credit a {
   pointer-events: none;
 }
 
@@ -408,6 +450,11 @@ button {
   padding: 26px 28px 28px;
   scrollbar-width: thin;
   scrollbar-color: rgba(150, 170, 255, 0.25) transparent;
+}
+
+/* Programmatic dialog focus shouldn't paint a ring on the panel itself. */
+.card:focus {
+  outline: none;
 }
 
 .card::-webkit-scrollbar {
@@ -474,6 +521,7 @@ button {
   font-size: 14px;
   line-height: 1.6;
   color: #c3cae8;
+  overflow-wrap: anywhere;
 }
 
 .card__readme {
@@ -485,6 +533,7 @@ button {
   font-size: 13px;
   line-height: 1.6;
   color: #8b93b8;
+  overflow-wrap: anywhere;
 }
 
 .card__stats {
@@ -749,17 +798,18 @@ button {
   }
 
   .hud__seed {
-    left: 20px;
-    bottom: 20px;
-    max-width: 60vw;
+    left: calc(20px + env(safe-area-inset-left, 0px));
+    bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    max-width: 88vw;
   }
 
   .hud__credit {
     display: none;
   }
 
+  /* Sits above the seed badge so the two never overlap. */
   .hud__hint {
-    bottom: 22px;
+    bottom: calc(70px + env(safe-area-inset-bottom, 0px));
     max-width: 92vw;
     white-space: normal;
     text-align: center;
@@ -787,6 +837,18 @@ button {
     margin: 0 auto 16px;
     border-radius: 2px;
     background: rgba(150, 170, 255, 0.3);
+  }
+
+  /* Invisible drag target over the handle area: starts swipe-to-dismiss
+     without fighting the scrollable card body. */
+  .card__grab {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 34px;
+    touch-action: none;
+    cursor: grab;
   }
 
   .card__close {

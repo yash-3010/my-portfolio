@@ -17,26 +17,36 @@ interface GalaxyStore {
   focus: FocusTarget
   /** Repo name under the pointer (drives cursor + label). */
   hovered: string | null
-  /** Loading screen has finished fading out. */
+  /** First frame has painted (loading screen may still be up). */
   ready: boolean
+  /** Loading screen has started revealing the canvas — intro dolly may begin. */
+  revealed: boolean
   /** Intro camera dolly has finished. */
   introDone: boolean
   setFocus: (focus: FocusTarget) => void
   clearFocus: () => void
   setHovered: (name: string | null) => void
   setReady: () => void
+  setRevealed: () => void
   setIntroDone: () => void
 }
 
-export const useGalaxyStore = create<GalaxyStore>((set) => ({
+export const useGalaxyStore = create<GalaxyStore>((set, get) => ({
   focus: null,
   hovered: null,
   ready: false,
+  revealed: false,
   introDone: false,
-  setFocus: (focus) => set({ focus, hovered: null }),
+  // Ignore focus requests until the intro flight lands — otherwise a click
+  // during the establishing dolly opens a card the camera can't frame yet.
+  setFocus: (focus) => {
+    if (!get().introDone) return
+    set({ focus, hovered: null })
+  },
   clearFocus: () => set({ focus: null }),
   setHovered: (hovered) => set({ hovered }),
   setReady: () => set({ ready: true }),
+  setRevealed: () => set({ revealed: true }),
   setIntroDone: () => set({ introDone: true }),
 }))
 

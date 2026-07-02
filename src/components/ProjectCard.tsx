@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { AnimatePresence, motion, useDragControls } from 'framer-motion'
 import { useGalaxyStore } from '../state/store'
 import type { GalaxyData } from '../types'
 import type { GalaxyLayout, PlanetSpec } from '../lib/galaxy'
@@ -126,9 +126,20 @@ function PlanetBody({ spec, onClose }: { spec: PlanetSpec; onClose: () => void }
   )
 }
 
+const AVATAR_TIMEOUT_MS = 4000
+
 function SunBody({ data, onClose }: { data: GalaxyData; onClose: () => void }) {
   const { user } = data
   const [imgFailed, setImgFailed] = useState(false)
+  const [imgLoaded, setImgLoaded] = useState(false)
+
+  // A hung avatar request never fires onError — fall back after a timeout so
+  // the card doesn't sit with an empty ring on flaky networks.
+  useEffect(() => {
+    if (imgLoaded || imgFailed) return
+    const timer = window.setTimeout(() => setImgFailed(true), AVATAR_TIMEOUT_MS)
+    return () => window.clearTimeout(timer)
+  }, [imgLoaded, imgFailed])
   const contributions = useMemo(
     () => data.contributions.reduce((sum, day) => sum + day.count, 0),
     [data.contributions],
@@ -153,6 +164,7 @@ function SunBody({ data, onClose }: { data: GalaxyData; onClose: () => void }) {
             alt={user.name}
             width={72}
             height={72}
+            onLoad={() => setImgLoaded(true)}
             onError={() => setImgFailed(true)}
           />
         )}
@@ -223,7 +235,7 @@ export function ProjectCard({ data, layout }: { data: GalaxyData; layout: Galaxy
   const exit = isMobile ? { y: 60, opacity: 0 } : { x: 48, opacity: 0 }
 
   return (
-    <AnimatePresence>
+    <AnimatePresence mode="wait">
       {body && key && (
         <motion.div
           className="card-wrap"
@@ -233,11 +245,69 @@ export function ProjectCard({ data, layout }: { data: GalaxyData; layout: Galaxy
           exit={exit}
           transition={{ type: 'spring', damping: 26, stiffness: 240 }}
         >
-          <div className="card glass" role="dialog" aria-label={ariaLabel}>
+          <CardShell ariaLabel={ariaLabel} isMobile={isMobile} onDismiss={clearFocus}>
             {body}
-          </div>
+          </CardShell>
         </motion.div>
       )}
     </AnimatePresence>
+  )
+}
+
+/**
+ * The glass panel itself: owns dialog focus management and, on mobile, the
+ * handle-driven swipe-to-dismiss (drag starts only from the grab handle so it
+ * never fights the scrollable card body).
+ */
+function CardShell({
+  ariaLabel,
+  isMobile,
+  onDismiss,
+  children,
+}: {
+  ariaLabel: string
+  isMobile: boolean
+  onDismiss: () => void
+  children: ReactNode
+}) {
+  const cardRef = useRef<HTMLDivElement>(null)
+  const dragControls = useDragControls()
+
+  // Move focus into the dialog on open; hand it back where it was on close.
+  useEffect(() => {
+    const previous = document.activeElement
+    cardRef.current?.focus({ preventScroll: true })
+    return () => {
+      if (previous instanceof HTMLElement && document.contains(previous)) {
+        previous.focus({ preventScroll: true })
+      }
+    }
+  }, [ariaLabel])
+
+  return (
+    <motion.div
+      ref={cardRef}
+      className="card glass"
+      role="dialog"
+      aria-label={ariaLabel}
+      tabIndex={-1}
+      drag={isMobile ? 'y' : false}
+      dragControls={dragControls}
+      dragListener={false}
+      dragConstraints={{ top: 0, bottom: 0 }}
+      dragElastic={{ top: 0, bottom: 0.6 }}
+      onDragEnd={(_, info) => {
+        if (info.offset.y > 90 || info.velocity.y > 600) onDismiss()
+      }}
+    >
+      {isMobile && (
+        <div
+          className="card__grab"
+          onPointerDown={(e) => dragControls.start(e)}
+          aria-hidden="true"
+        />
+      )}
+      {children}
+    </motion.div>
   )
 }

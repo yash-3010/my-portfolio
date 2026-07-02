@@ -28,6 +28,12 @@ export function LoadingScreen() {
 
   const done = ready && minHold
 
+  // The instant the exit fade starts, the canvas is being revealed — let the
+  // camera rig begin the intro dolly so the flight is actually visible.
+  useEffect(() => {
+    if (done) useGalaxyStore.getState().setRevealed()
+  }, [done])
+
   useEffect(() => {
     if (done) {
       setPercent(100)
@@ -54,11 +60,21 @@ export function LoadingScreen() {
           initial={{ opacity: 1 }}
           exit={{ opacity: 0, scale: 1.06 }}
           transition={{ duration: 0.7, ease: [0.4, 0, 0.2, 1] }}
+          // Release input the moment the exit fade begins — the user's first
+          // drag/click must reach the galaxy, not the dying overlay.
+          style={{ pointerEvents: done ? 'none' : 'auto' }}
         >
           <div className="loading__star" aria-hidden="true" />
-          <h1 className="loading__title">The Living Repo Galaxy</h1>
+          <div className="loading__title">The Living Repo Galaxy</div>
           <p className="loading__line">generating galaxy from github data</p>
-          <div className="loading__bar" aria-hidden="true">
+          <div
+            className="loading__bar"
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(percent)}
+            aria-label="Scene build progress"
+          >
             <div className="loading__bar-fill" style={{ width: `${percent}%` }} />
           </div>
         </motion.div>

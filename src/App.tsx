@@ -1,4 +1,5 @@
 import { useEffect, useMemo } from 'react'
+import { MotionConfig } from 'framer-motion'
 import type { GalaxyData } from './types'
 import { buildGalaxy } from './lib/galaxy'
 import { useGalaxyStore } from './state/store'
@@ -23,12 +24,16 @@ function App() {
   }, [])
 
   return (
-    <div className="app">
-      <GalaxyCanvas data={galaxyData} layout={layout} />
-      <HUD data={galaxyData} layout={layout} />
-      <ProjectCard data={galaxyData} layout={layout} />
-      <LoadingScreen />
-    </div>
+    // reducedMotion="user" turns framer transforms into plain fades when the
+    // OS asks for reduced motion (CSS alone can't reach framer's rAF styles).
+    <MotionConfig reducedMotion="user">
+      <div className="app">
+        <GalaxyCanvas data={galaxyData} layout={layout} />
+        <HUD data={galaxyData} layout={layout} />
+        <ProjectCard data={galaxyData} layout={layout} />
+        <LoadingScreen />
+      </div>
+    </MotionConfig>
   )
 }
 

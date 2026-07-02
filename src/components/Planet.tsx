@@ -25,7 +25,6 @@ export function Planet({ spec }: { spec: PlanetSpec }) {
   const coreRef = useRef<Mesh>(null)
   const bodyMatRef = useRef<MeshStandardMaterial>(null)
   const moonRefs = useRef<(Mesh | null)[]>([])
-  const downRef = useRef({ x: 0, y: 0 })
 
   // Persistent world-position vector shared with the camera rig via the store map.
   const worldPosRef = useRef<Vector3 | null>(null)
@@ -80,18 +79,10 @@ export function Planet({ spec }: { spec: PlanetSpec }) {
     }
   })
 
-  const handlePointerDown = (e: ThreeEvent<PointerEvent>) => {
-    downRef.current.x = e.clientX
-    downRef.current.y = e.clientY
-  }
-
   const handleClick = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation()
-    const moved = Math.hypot(
-      e.clientX - downRef.current.x,
-      e.clientY - downRef.current.y,
-    )
-    if (moved > DRAG_THRESHOLD_PX) return
+    // R3F tracks pointer travel since pointerdown; big delta = drag, not a tap.
+    if (e.delta > DRAG_THRESHOLD_PX) return
     setFocus({ kind: 'planet', name })
   }
 
@@ -156,10 +147,10 @@ export function Planet({ spec }: { spec: PlanetSpec }) {
         </mesh>
       ))}
 
-      {/* Invisible oversized hit target — R3F raycasts invisible meshes. */}
+      {/* Invisible padded hit target — R3F raycasts invisible meshes. Capped
+          so it can never occlude a neighboring planet's visible body. */}
       <mesh
         visible={false}
-        onPointerDown={handlePointerDown}
         onClick={handleClick}
         onPointerOver={(e) => {
           e.stopPropagation()
@@ -167,14 +158,16 @@ export function Planet({ spec }: { spec: PlanetSpec }) {
         }}
         onPointerOut={() => setHovered(null)}
       >
-        <sphereGeometry args={[Math.max(spec.size * 1.6, 1.0), 12, 12]} />
+        <sphereGeometry args={[Math.min(Math.max(spec.size * 1.6, 1.0), 1.2), 12, 12]} />
       </mesh>
 
       {showLabel && (
         <Html
           position={[0, spec.size + 0.9, 0]}
           center
-          distanceFactor={14}
+          distanceFactor={16}
+          // Keep labels below the 2D overlay layer (loading z=100, card z=20).
+          zIndexRange={[8, 0]}
           style={{ pointerEvents: 'none' }}
         >
           <div

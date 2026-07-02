@@ -38,6 +38,8 @@ function mulberry32(seed: number): () => number {
 
 const VERTEX_SHADER = /* glsl */ `
   uniform float uTime;
+  uniform float uScale;
+  uniform float uMaxSize;
   attribute vec3 aColor;
   attribute float aSize;
   attribute float aTwinkle;
@@ -51,8 +53,9 @@ const VERTEX_SHADER = /* glsl */ `
     float phase = aTwinkle - strong * ${TWINKLE_FLAG.toFixed(1)};
     float amp = mix(0.18, 0.30, strong);
     float twinkle = (1.0 - amp) + amp * sin(uTime * 1.4 + phase);
-    float size = aSize * (280.0 / -mvPosition.z) * twinkle;
-    gl_PointSize = clamp(size, 1.0, 24.0);
+    // uScale carries viewport height * dpr so apparent size is device-independent.
+    float size = aSize * (uScale / -mvPosition.z) * twinkle;
+    gl_PointSize = clamp(size, 1.0, uMaxSize);
     gl_Position = projectionMatrix * mvPosition;
   }
 `
@@ -106,7 +109,7 @@ function buildBuffers(contributions: ContributionDay[], radius: number): StarBuf
     const day = contributions[i]
     const rnd = mulberry32(BAND_SEED + i)
 
-    const lon = (i / 365) * Math.PI * 2
+    const lon = (i / bandCount) * Math.PI * 2
     // Weekday spreads the band into a ribbon (±~0.16 rad) + seeded jitter.
     const weekday = weekdayOf(day.date, i)
     const lat = ((weekday - 3) / 3) * 0.16 + (rnd() - 0.5) * 0.07
@@ -124,7 +127,7 @@ function buildBuffers(contributions: ContributionDay[], radius: number): StarBuf
     colors[i * 3] = color.r
     colors[i * 3 + 1] = color.g
     colors[i * 3 + 2] = color.b
-    sizes[i] = 1.1 + t * 2.3
+    sizes[i] = 1.4 + t * 2.8
     twinkles[i] = rnd() * Math.PI * 2 + TWINKLE_FLAG
   }
 
@@ -153,7 +156,8 @@ function buildBuffers(contributions: ContributionDay[], radius: number): StarBuf
     } else {
       color.copy(cool).lerp(white, rnd())
     }
-    const brightness = 0.35 + rnd() * 0.5
+    // Kept dimmer than the contribution band so the band reads as the feature.
+    const brightness = 0.28 + rnd() * 0.4
     colors[k * 3] = color.r * brightness
     colors[k * 3 + 1] = color.g * brightness
     colors[k * 3 + 2] = color.b * brightness
@@ -187,7 +191,11 @@ export function Starfield({
   const material = useMemo(
     () =>
       new ShaderMaterial({
-        uniforms: { uTime: { value: 0 } },
+        uniforms: {
+          uTime: { value: 0 },
+          uScale: { value: 280 },
+          uMaxSize: { value: 24 },
+        },
         vertexShader: VERTEX_SHADER,
         fragmentShader: FRAGMENT_SHADER,
         blending: AdditiveBlending,
@@ -203,6 +211,11 @@ export function Starfield({
   useFrame((state) => {
     // Wall-clock time (NOT galaxyClock): stars twinkle even when frozen.
     material.uniforms.uTime.value = state.clock.getElapsedTime()
+    // Device-independent star sizes: scale with framebuffer height (280 was
+    // tuned against a 900px-tall dpr-1 viewport).
+    const dpr = state.viewport.dpr
+    material.uniforms.uScale.value = (state.size.height * dpr * 280) / 900
+    material.uniforms.uMaxSize.value = 24 * dpr
   })
 
   return (

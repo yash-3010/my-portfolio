@@ -15,12 +15,16 @@ const TAGLINE_MAX = 90
 
 function truncate(text: string, max: number): string {
   if (text.length <= max) return text
-  return `${text.slice(0, max - 1).trimEnd()}…`
+  const cut = text.slice(0, max - 1)
+  // Break on a word boundary when one is reasonably close.
+  const lastSpace = cut.lastIndexOf(' ')
+  return `${(lastSpace > max * 0.6 ? cut.slice(0, lastSpace) : cut).trimEnd()}…`
 }
 
 export function HUD({ data, layout }: { data: GalaxyData; layout: GalaxyLayout }) {
   const introDone = useGalaxyStore((s) => s.introDone)
   const focused = useGalaxyStore((s) => s.focus !== null)
+  const setFocus = useGalaxyStore((s) => s.setFocus)
   const [everFocused, setEverFocused] = useState(false)
 
   useEffect(() => {
@@ -39,6 +43,22 @@ export function HUD({ data, layout }: { data: GalaxyData; layout: GalaxyLayout }
 
   return (
     <div className={`hud${focused ? ' hud--focused' : ''}`}>
+      {/* Keyboard path into the galaxy: visually hidden until focused. */}
+      <nav className="hud__nav" aria-label="Explore the galaxy">
+        <button type="button" onClick={() => setFocus({ kind: 'sun' })}>
+          About {data.user.name}
+        </button>
+        {layout.planets.map((p) => (
+          <button
+            type="button"
+            key={p.repo.name}
+            onClick={() => setFocus({ kind: 'planet', name: p.repo.name })}
+          >
+            {p.repo.name}
+          </button>
+        ))}
+      </nav>
+
       {/* Top-left brand */}
       <motion.div
         className="hud__brand"
@@ -46,7 +66,7 @@ export function HUD({ data, layout }: { data: GalaxyData; layout: GalaxyLayout }
         animate={introDone ? { opacity: 1, y: 0 } : { opacity: 0, y: -10 }}
         transition={{ delay: 0.3, duration: 0.8, ease: 'easeOut' }}
       >
-        <h1 className="hud__name">YASH</h1>
+        <h1 className="hud__name">{data.user.name.toUpperCase()}</h1>
         <p className="hud__sub">The Living Repo Galaxy</p>
         {tagline && <p className="hud__tagline">{tagline}</p>}
       </motion.div>
@@ -119,7 +139,7 @@ export function HUD({ data, layout }: { data: GalaxyData; layout: GalaxyLayout }
         transition={{ delay: 0.9, duration: 0.6 }}
       >
         <a href={data.user.profileUrl} target="_blank" rel="noreferrer">
-          built from github.com/yash-3010
+          built from github.com/{data.user.login}
         </a>
       </motion.div>
     </div>

@@ -37,10 +37,13 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # github.event.repository is empty on schedule events, so derive the
+      # base path from GITHUB_REPOSITORY (present for every trigger).
       - name: Build
-        run: npm run build
-        env:
-          DEPLOY_BASE: /${{ github.event.repository.name }}/
+        run: |
+          export DEPLOY_BASE="/${GITHUB_REPOSITORY#*/}/"
+          echo "Building with DEPLOY_BASE=$DEPLOY_BASE"
+          npm run build
 
       - uses: actions/upload-pages-artifact@v3
         with:

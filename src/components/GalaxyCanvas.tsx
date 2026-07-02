@@ -1,5 +1,6 @@
 import { Suspense, useEffect, useRef } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
+import { Bloom, EffectComposer } from '@react-three/postprocessing'
 import type { GalaxyData } from '../types'
 import type { GalaxyLayout } from '../lib/galaxy'
 import { galaxyClock, useGalaxyStore } from '../state/store'
@@ -39,7 +40,14 @@ export function GalaxyCanvas({ data, layout }: { data: GalaxyData; layout: Galax
     <div className="canvas-wrap">
       <Canvas
         dpr={[1, 2]}
-        camera={{ fov: 50, near: 0.5, far: 900, position: [0, maxR * 2.6, maxR * 3.4] }}
+        camera={{
+          fov: 50,
+          near: 0.5,
+          // Everything else (fog, controls.maxDistance, starfield) scales with
+          // the layout, so the frustum must too.
+          far: Math.max(300, maxR * 6),
+          position: [0, maxR * 2.6, maxR * 3.4],
+        }}
         gl={{ antialias: true, powerPreference: 'high-performance' }}
         onCreated={() => {
           // Signal readiness once the first frame has actually painted.
@@ -65,6 +73,16 @@ export function GalaxyCanvas({ data, layout }: { data: GalaxyData; layout: Galax
           ))}
           <Orbits planets={layout.planets} />
           <CameraRig layout={layout} />
+          {/* Selective bloom unifies every glow source (sun, halos, active
+              planets, starfield) into one consistent light bleed. */}
+          <EffectComposer multisampling={0}>
+            <Bloom
+              mipmapBlur
+              luminanceThreshold={0.6}
+              luminanceSmoothing={0.25}
+              intensity={0.85}
+            />
+          </EffectComposer>
         </Suspense>
       </Canvas>
     </div>

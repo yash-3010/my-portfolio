@@ -34,7 +34,8 @@ const OUT_FILE = path.resolve(
 /** Max parallel per-repo enrichment requests. */
 const CONCURRENCY = 4
 /** Without a token (60 req/h budget) fully enrich only this many repos. */
-const UNAUTH_ENRICH_LIMIT = 20
+// (60 anonymous req/h − profile − listing) / 3 enrichment calls per repo.
+const UNAUTH_ENRICH_LIMIT = 18
 /** Target length for readme summaries. */
 const SUMMARY_MAX_CHARS = 280
 
@@ -99,8 +100,14 @@ async function ghFetch(url, options = {}) {
       (res.headers.get('x-ratelimit-remaining') === '0' || res.headers.has('retry-after'))
 
     if (isRateLimited && rateHits < MAX_RATE_RETRIES) {
-      rateHits += 1
       const waitMs = rateLimitWaitMs(res)
+      // If the quota resets further out than we're willing to wait, sleeping
+      // toward it is pointless — fail soft immediately instead of stalling.
+      if (waitMs === null) {
+        warn(`rate limited on ${url}; quota resets too far out to wait — skipping`)
+        return res
+      }
+      rateHits += 1
       warn(
         `rate limited on ${url} (attempt ${rateHits}/${MAX_RATE_RETRIES}); ` +
           `waiting ${Math.round(waitMs / 1000)}s`,
@@ -116,17 +123,20 @@ async function ghFetch(url, options = {}) {
 /**
  * How long to wait before retrying a rate-limited response, in ms.
  * Prefers Retry-After, falls back to x-ratelimit-reset, capped at 60s.
+ * Returns null when the advised wait exceeds the cap — retrying can't help.
  */
 function rateLimitWaitMs(res) {
   const CAP = 60_000
   const retryAfter = Number(res.headers.get('retry-after'))
   if (Number.isFinite(retryAfter) && retryAfter > 0) {
-    return Math.min(retryAfter * 1000, CAP)
+    const ms = retryAfter * 1000
+    return ms > CAP ? null : ms
   }
   const reset = Number(res.headers.get('x-ratelimit-reset'))
   if (Number.isFinite(reset) && reset > 0) {
     const untilReset = reset * 1000 - Date.now()
-    if (untilReset > 0) return Math.min(untilReset, CAP)
+    if (untilReset > CAP) return null
+    if (untilReset > 0) return untilReset
   }
   return CAP
 }
@@ -190,16 +200,18 @@ async function fetchUser(login) {
  * ones. Sorted by most recently pushed (as returned by the API).
  */
 async function fetchRepoList(login) {
+  const keep = (r) => !r.fork && !r.archived
   const repos = []
   for (let page = 1; page <= 10; page += 1) {
     const batch = await getJson(
       `/users/${login}/repos?per_page=100&type=owner&sort=pushed&page=${page}`,
     )
-    if (!batch) return repos.length ? repos : null
+    // Mid-pagination failure: fall back to what we have, still filtered.
+    if (!batch) return repos.length ? repos.filter(keep) : null
     repos.push(...batch)
     if (batch.length < 100) break
   }
-  return repos.filter((r) => !r.fork && !r.archived)
+  return repos.filter(keep)
 }
 
 // ---------------------------------------------------------------------------
@@ -223,8 +235,21 @@ async function fetchCommitCount(owner, repo) {
   }
   const link = res.headers.get('link')
   if (!link) return 1
-  const match = link.match(/[?&]page=(\d+)>;\s*rel="last"/)
-  return match ? Number(match[1]) : 1
+  // Parse the rel="last" segment properly instead of assuming page= is the
+  // final query parameter of the URL.
+  for (const segment of link.split(',')) {
+    if (!/rel="last"/.test(segment)) continue
+    const urlMatch = segment.match(/<([^>]+)>/)
+    if (!urlMatch) break
+    try {
+      const page = new URL(urlMatch[1]).searchParams.get('page')
+      if (page) return Number(page)
+    } catch {
+      break
+    }
+  }
+  warn(`commits for ${repo}: unparsable Link header, falling back to estimate`)
+  return null
 }
 
 /** Top 4 languages by bytes, most used first; null on failure. */
@@ -402,21 +427,22 @@ async function fetchContributions(login) {
  * Contributions for the output file. With a token: live GraphQL data.
  * Without one (or on GraphQL failure): keep the existing file's array if
  * present, else emit 365 zero-count days.
+ * Returns { days, live } so provenance can be recorded in the output.
  */
 async function resolveContributions(login, existing) {
   if (TOKEN) {
     const live = await fetchContributions(login)
-    if (live && live.length) return live
+    if (live && live.length) return { days: live, live: true }
     warn('falling back to existing/zero contributions')
   } else {
     log('no token: GraphQL contributions unavailable')
   }
   if (Array.isArray(existing?.contributions) && existing.contributions.length) {
     log(`kept ${existing.contributions.length} contribution days from existing github.json`)
-    return existing.contributions
+    return { days: existing.contributions, live: false }
   }
   log('no existing contributions found; emitting 365 zero-count days')
-  return zeroContributions()
+  return { days: zeroContributions(), live: false }
 }
 
 // ---------------------------------------------------------------------------
@@ -492,14 +518,21 @@ async function main() {
   )
 
   const contributions = await resolveContributions(LOGIN, existing)
+  // Repos are live now, but if the contribution band was inherited from a
+  // file marked as seed data, that placeholder provenance must survive —
+  // fabricated counts must never masquerade as a real calendar.
+  const inheritedSeedContributions = !contributions.live && existing?.seed === true
 
   /** @type {import('../src/types.ts').GalaxyData} */
   const data = {
     user,
     repos,
-    contributions,
+    contributions: contributions.days,
     fetchedAt: new Date().toISOString(),
-    // no `seed` flag: this is live data
+    ...(inheritedSeedContributions ? { seed: true } : {}),
+  }
+  if (inheritedSeedContributions) {
+    warn('contribution band is still seed data — rerun with GITHUB_TOKEN for the real calendar')
   }
 
   await mkdir(path.dirname(OUT_FILE), { recursive: true })
