@@ -1,0 +1,66 @@
+name: Deploy galaxy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    # Nightly rebuild so the galaxy tracks live GitHub activity.
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Enables GitHub Pages (source: Actions) on first run, so no manual
+      # repo-settings step is needed.
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Refresh the galaxy snapshot. The script never hard-fails: on API
+      # trouble it keeps the committed src/data/github.json.
+      - name: Fetch live GitHub data
+        run: npm run fetch:github
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # github.event.repository is empty on schedule events, so derive the
+      # base path from GITHUB_REPOSITORY (present for every trigger).
+      - name: Build
+        run: |
+          export DEPLOY_BASE="/${GITHUB_REPOSITORY#*/}/"
+          echo "Building with DEPLOY_BASE=$DEPLOY_BASE"
+          npm run build
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
