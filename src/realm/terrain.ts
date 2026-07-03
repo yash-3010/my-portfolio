@@ -46,8 +46,18 @@ export function climateAt(x: number, z: number): ClimateWeights {
   }
 }
 
-/** Terrain height at world x/z. */
-export function heightAt(x: number, z: number): number {
+/** A spot the terrain flattens into a buildable plateau (castle site). */
+export interface FlattenSite {
+  x: number
+  z: number
+  /** Plateau height. */
+  y: number
+  /** Fully flat within r; blends back to raw terrain over r..r+10. */
+  r: number
+}
+
+/** Raw (site-agnostic) terrain height at world x/z. */
+export function rawHeightAt(x: number, z: number): number {
   const { frozen } = climateAt(x, z)
 
   // Rolling base terrain.
@@ -121,14 +131,28 @@ function colorAt(x: number, z: number, h: number, out: Color): Color {
 /* Geometry                                                          */
 /* ---------------------------------------------------------------- */
 
+/** Height including plateau flattening around castle sites. */
+export function heightAt(x: number, z: number, sites: FlattenSite[] = []): number {
+  let h = rawHeightAt(x, z)
+  for (const site of sites) {
+    const dx = x - site.x
+    const dz = z - site.z
+    const d = Math.sqrt(dx * dx + dz * dz)
+    if (d > site.r + 10) continue
+    const w = 1 - smoothstep(site.r, site.r + 10, d)
+    h = h + (site.y - h) * w
+  }
+  return h
+}
+
 /** Build the faceted island geometry (non-indexed, per-face vertex colors). */
-export function buildTerrainGeometry(): BufferGeometry {
+export function buildTerrainGeometry(sites: FlattenSite[] = []): BufferGeometry {
   const plane = new PlaneGeometry(REALM_SIZE, REALM_SIZE, SEGMENTS, SEGMENTS)
   plane.rotateX(-Math.PI / 2)
 
   const pos = plane.attributes.position
   for (let i = 0; i < pos.count; i++) {
-    pos.setY(i, heightAt(pos.getX(i), pos.getZ(i)))
+    pos.setY(i, heightAt(pos.getX(i), pos.getZ(i), sites))
   }
 
   // Non-indexed so each face can carry a single flat color.

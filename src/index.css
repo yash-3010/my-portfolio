@@ -972,3 +972,32 @@ button {
     text-align: center;
   }
 }
+
+/* Realm Phase 2: kingdom markers + focused state */
+
+.kingdom-label {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  opacity: 0.55;
+  text-shadow: 0 2px 16px rgba(0, 0, 0, 0.9);
+  user-select: none;
+}
+
+.realm-hud__zones span {
+  margin-right: 14px;
+}
+
+.realm-hud__hint,
+.realm-hud__zones {
+  transition: opacity 300ms ease, visibility 0s 0s;
+}
+
+.realm-hud--focused .realm-hud__hint,
+.realm-hud--focused .realm-hud__zones {
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 300ms ease, visibility 0s 300ms;
+}
