@@ -39,7 +39,7 @@ import {
 } from './terrain'
 import { KINGDOM_ANCHORS, buildRealm, type CastleSpec, type RealmLayout } from './realm'
 import { Castle } from './Castle'
-import { buildWall, type WallBuild } from './wall'
+import { buildWall, type WallBuild } from './wallBuild'
 import { Wall } from './Wall'
 import { Trees } from './Trees'
 import { HeroTrees } from './Heroes'

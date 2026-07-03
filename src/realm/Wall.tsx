@@ -10,8 +10,8 @@ import { useFrame } from '@react-three/fiber'
 import type { ThreeEvent } from '@react-three/fiber'
 import { Html, useCursor } from '@react-three/drei'
 import { useGalaxyStore } from '../state/store'
-import type { WallBuild } from './wall'
-import { WALL_THICKNESS } from './wall'
+import type { WallBuild } from './wallBuild'
+import { WALL_THICKNESS } from './wallBuild'
 import { makeNoise2D } from './noise'
 
 /**
