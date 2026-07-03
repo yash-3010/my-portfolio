@@ -1,5 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { BoxGeometry, ConeGeometry, CylinderGeometry, DoubleSide } from 'three'
+import type { PointLight } from 'three'
+import { useFrame } from '@react-three/fiber'
 import type { ThreeEvent } from '@react-three/fiber'
 import { Html, useCursor } from '@react-three/drei'
 import type { CastleSpec } from './realm'
@@ -47,6 +49,43 @@ const TENT_STAR = '#d9c18a'
 const TENT_FORK = '#9aa3b2'
 const DRAG_THRESHOLD_PX = 8
 
+/** Flickering courtyard fire: emissive flame cone + dancing point light. */
+function Brazier({ s }: { s: number }) {
+  const lightRef = useRef<PointLight>(null)
+  useFrame((state) => {
+    const light = lightRef.current
+    if (!light) return
+    const t = state.clock.getElapsedTime()
+    light.intensity =
+      (7 + Math.sin(t * 11) * 1.6 + Math.sin(t * 23 + 1.7) * 1.1) * s
+  })
+  return (
+    <group position={[2.2 * s, 0.5, 1.4 * s]}>
+      <mesh geometry={BRAZIER_GEO} scale={s} position={[0, 0.2 * s, 0]}>
+        <meshStandardMaterial color="#3c3630" roughness={0.9} />
+      </mesh>
+      <mesh geometry={FLAME_GEO} scale={s} position={[0, 0.65 * s, 0]}>
+        <meshStandardMaterial
+          color="#ff7a2e"
+          emissive="#ff9d3c"
+          emissiveIntensity={2.6}
+        />
+      </mesh>
+      <pointLight
+        ref={lightRef}
+        color="#ff9d4c"
+        intensity={7}
+        distance={18 * s}
+        decay={2}
+        position={[0, 1.2 * s, 0]}
+      />
+    </group>
+  )
+}
+
+const BRAZIER_GEO = new CylinderGeometry(0.34, 0.24, 0.4, 6)
+const FLAME_GEO = new ConeGeometry(0.22, 0.62, 5)
+
 function mulberry(seed: number): () => number {
   let a = seed | 0
   return () => {
@@ -62,6 +101,7 @@ export function Castle({ spec }: { spec: CastleSpec }) {
   const s = spec.scale
   const hovered = useGalaxyStore((st) => st.hovered)
   const focus = useGalaxyStore((st) => st.focus)
+  const daytime = useGalaxyStore((st) => st.daytime)
   const setHovered = useGalaxyStore((st) => st.setHovered)
   const setFocus = useGalaxyStore((st) => st.setFocus)
   const [localHover, setLocalHover] = useState(false)
@@ -201,9 +241,9 @@ export function Castle({ spec }: { spec: CastleSpec }) {
             rotation={[0, -w.angle + Math.PI / 2, 0]}
           >
             <meshStandardMaterial
-              color="#241a10"
+              color={daytime ? '#141a24' : '#241a10'}
               emissive={WINDOW_GLOW}
-              emissiveIntensity={w.lit ? 2.4 : 0.05}
+              emissiveIntensity={daytime ? 0 : w.lit ? 2.4 : 0.05}
             />
           </mesh>
         ))}
@@ -276,12 +316,17 @@ export function Castle({ spec }: { spec: CastleSpec }) {
             <meshStandardMaterial
               color="#ffd27d"
               emissive="#ffb85c"
-              emissiveIntensity={1.6}
+              emissiveIntensity={daytime ? 0.2 : 1.6}
             />
           </mesh>
-          <pointLight color="#ffb85c" intensity={9 * s} distance={16 * s} decay={2} position={[0, 5.7 * s, 0]} />
+          {!daytime && (
+            <pointLight color="#ffb85c" intensity={9 * s} distance={16 * s} decay={2} position={[0, 5.7 * s, 0]} />
+          )}
         </group>
       )}
+
+      {/* Courtyard fire at night — highlight castles only (light budget). */}
+      {spec.highlight && !daytime && <Brazier s={s} />}
 
       {/* Invisible hit volume over the whole castle */}
       <mesh

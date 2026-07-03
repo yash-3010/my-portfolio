@@ -4,7 +4,16 @@ import { CameraControls, Environment, Html, Stars } from '@react-three/drei'
 import { Bloom, EffectComposer, N8AO, Vignette } from '@react-three/postprocessing'
 import CameraControlsImpl from 'camera-controls'
 import { suspend } from 'suspend-react'
-import { Box3, Color, Fog, Vector3 } from 'three'
+import {
+  AdditiveBlending,
+  Box3,
+  BufferGeometry,
+  Color,
+  Float32BufferAttribute,
+  Fog,
+  ShaderMaterial,
+  Vector3,
+} from 'three'
 import type { GalaxyData } from '../types'
 import { buildGalaxy } from '../lib/galaxy'
 import { CONSTELLATIONS } from '../lib/palette'
@@ -13,6 +22,7 @@ import { ProjectCard } from '../components/ProjectCard'
 import githubJson from '../data/github.json'
 import {
   KINGDOM_AMBIENCE,
+  KINGDOM_AMBIENCE_DAY,
   REALM_SIZE,
   WALL_SPAN_X,
   WATER_LEVEL,
@@ -28,7 +38,13 @@ import { Trees } from './Trees'
 import { Lightning } from './Lightning'
 import { makeNoiseNormalMap } from './textures'
 
-const nightHdri = import('@pmndrs/assets/hdri/night.exr')
+/** Lazily-created HDRI module promises (each is its own code-split chunk). */
+let nightHdri: Promise<{ default: string }> | null = null
+let dawnHdri: Promise<{ default: string }> | null = null
+function hdriFor(daytime: boolean) {
+  if (daytime) return (dawnHdri ??= import('@pmndrs/assets/hdri/dawn.exr'))
+  return (nightHdri ??= import('@pmndrs/assets/hdri/night.exr'))
+}
 
 /**
  * The Living Realm — Phase 2 (see docs/realm-concept.md).
@@ -82,6 +98,7 @@ function Terrain({ realm }: { realm: RealmLayout }) {
 }
 
 function Sea() {
+  const daytime = useGalaxyStore((s) => s.daytime)
   const normals = useMemo(() => {
     const t = makeNoiseNormalMap(0x05ea, 1.1)
     t.repeat.set(30, 30)
@@ -95,7 +112,7 @@ function Sea() {
     <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, WATER_LEVEL, 0]} receiveShadow>
       <planeGeometry args={[REALM_SIZE * 2.2, REALM_SIZE * 2.2]} />
       <meshStandardMaterial
-        color="#0f2137"
+        color={daytime ? '#2a5a86' : '#0f2137'}
         roughness={0.14}
         metalness={0.08}
         normalMap={normals}
@@ -103,10 +120,89 @@ function Sea() {
         transparent
         opacity={0.96}
         emissive="#081525"
-        emissiveIntensity={0.5}
-        envMapIntensity={0.35}
+        emissiveIntensity={daytime ? 0.1 : 0.5}
+        envMapIntensity={daytime ? 0.55 : 0.35}
       />
     </mesh>
+  )
+}
+
+/**
+ * Golden dust drifting over the midlands — the "sun rays" feel. Custom
+ * points shader (same recipe as the starfield): drei Sparkles turned out to
+ * be pathologically slow under software WebGL, this is verified fast.
+ */
+const DUST_COUNT = 420
+
+function DustMotes() {
+  const { geometry, material } = useMemo(() => {
+    let seed = 0xd057
+    const rand = () => {
+      seed = (seed + 0x6d2b79f5) | 0
+      let t = Math.imul(seed ^ (seed >>> 15), 1 | seed)
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+    }
+    const positions = new Float32Array(DUST_COUNT * 3)
+    const phases = new Float32Array(DUST_COUNT)
+    const span = REALM_SIZE * 0.42
+    for (let i = 0; i < DUST_COUNT; i++) {
+      positions[i * 3] = (rand() * 2 - 1) * span
+      positions[i * 3 + 1] = 4 + rand() * 42
+      positions[i * 3 + 2] = 10 + (rand() * 2 - 1) * span
+      phases[i] = rand() * Math.PI * 2
+    }
+    const geo = new BufferGeometry()
+    geo.setAttribute('position', new Float32BufferAttribute(positions, 3))
+    geo.setAttribute('aPhase', new Float32BufferAttribute(phases, 1))
+    const mat = new ShaderMaterial({
+      uniforms: { uTime: { value: 0 } },
+      vertexShader: /* glsl */ `
+        uniform float uTime;
+        attribute float aPhase;
+        void main() {
+          vec3 p = position;
+          p.y += sin(uTime * 0.25 + aPhase) * 2.4;
+          p.x += sin(uTime * 0.17 + aPhase * 2.1) * 1.8;
+          vec4 mv = modelViewMatrix * vec4(p, 1.0);
+          gl_PointSize = clamp(240.0 / -mv.z, 1.0, 6.0);
+          gl_Position = projectionMatrix * mv;
+        }
+      `,
+      fragmentShader: /* glsl */ `
+        void main() {
+          float d = length(gl_PointCoord - vec2(0.5));
+          float alpha = (1.0 - smoothstep(0.1, 0.5, d)) * 0.3;
+          if (alpha <= 0.004) discard;
+          gl_FragColor = vec4(vec3(1.0, 0.91, 0.77) * alpha, alpha);
+        }
+      `,
+      blending: AdditiveBlending,
+      transparent: true,
+      depthWrite: false,
+    })
+    return { geometry: geo, material: mat }
+  }, [])
+
+  useEffect(
+    () => () => {
+      geometry.dispose()
+      material.dispose()
+    },
+    [geometry, material],
+  )
+
+  useFrame((state) => {
+    material.uniforms.uTime.value = state.clock.getElapsedTime()
+  })
+
+  return (
+    <points
+      geometry={geometry}
+      material={material}
+      frustumCulled={false}
+      raycast={() => null}
+    />
   )
 }
 
@@ -131,31 +227,26 @@ function ClimateAmbience() {
     const bg = scene.background as Color | null
     if (!fog || !bg) return
     const { frozen, vale, rune } = climateAt(camera.position.x, camera.position.z)
+    const A = useGalaxyStore.getState().daytime ? KINGDOM_AMBIENCE_DAY : KINGDOM_AMBIENCE
     skyTarget.setRGB(
-      KINGDOM_AMBIENCE.frozen.sky.r * frozen +
-        KINGDOM_AMBIENCE.vale.sky.r * vale +
-        KINGDOM_AMBIENCE.rune.sky.r * rune,
-      KINGDOM_AMBIENCE.frozen.sky.g * frozen +
-        KINGDOM_AMBIENCE.vale.sky.g * vale +
-        KINGDOM_AMBIENCE.rune.sky.g * rune,
-      KINGDOM_AMBIENCE.frozen.sky.b * frozen +
-        KINGDOM_AMBIENCE.vale.sky.b * vale +
-        KINGDOM_AMBIENCE.rune.sky.b * rune,
+      A.frozen.sky.r * frozen + A.vale.sky.r * vale + A.rune.sky.r * rune,
+      A.frozen.sky.g * frozen + A.vale.sky.g * vale + A.rune.sky.g * rune,
+      A.frozen.sky.b * frozen + A.vale.sky.b * vale + A.rune.sky.b * rune,
     )
     fogTarget.setRGB(
-      KINGDOM_AMBIENCE.frozen.fog.r * frozen +
-        KINGDOM_AMBIENCE.vale.fog.r * vale +
-        KINGDOM_AMBIENCE.rune.fog.r * rune,
-      KINGDOM_AMBIENCE.frozen.fog.g * frozen +
-        KINGDOM_AMBIENCE.vale.fog.g * vale +
-        KINGDOM_AMBIENCE.rune.fog.g * rune,
-      KINGDOM_AMBIENCE.frozen.fog.b * frozen +
-        KINGDOM_AMBIENCE.vale.fog.b * vale +
-        KINGDOM_AMBIENCE.rune.fog.b * rune,
+      A.frozen.fog.r * frozen + A.vale.fog.r * vale + A.rune.fog.r * rune,
+      A.frozen.fog.g * frozen + A.vale.fog.g * vale + A.rune.fog.g * rune,
+      A.frozen.fog.b * frozen + A.vale.fog.b * vale + A.rune.fog.b * rune,
     )
+    // Ease everything — toggling time-of-day sweeps rather than snaps.
     const k = Math.min(1, delta * 2)
     bg.lerp(skyTarget, k)
     fog.color.lerp(fogTarget, k)
+    const daytime = useGalaxyStore.getState().daytime
+    const nearT = daytime ? 300 : 230
+    const farT = daytime ? 820 : 640
+    fog.near += (nearT - fog.near) * k
+    fog.far += (farT - fog.far) * k
   })
   return null
 }
@@ -363,6 +454,8 @@ export default function RealmApp() {
   // The galaxy layout supplies the PlanetSpecs the shared ProjectCard reads.
   const galaxyLayout = useMemo(() => buildGalaxy(galaxyData), [])
   const focused = useGalaxyStore((s) => s.focus !== null)
+  const daytime = useGalaxyStore((s) => s.daytime)
+  const toggleDaytime = useGalaxyStore((s) => s.toggleDaytime)
   const pointerDown = useRef({ x: 0, y: 0 })
   // Desktop gets the full treatment; coarse-pointer devices skip AO and
   // halve the forest + shadow resolution.
@@ -409,13 +502,15 @@ export default function RealmApp() {
             if (Math.hypot(dx, dy) < 8) useGalaxyStore.getState().clearFocus()
           }}
         >
-          {/* Moonlight key with real shadows; faint warm western rim. */}
-          <hemisphereLight args={['#1a2440', '#0a0806', 0.55]} />
+          {/* Key light: warm sun by day, cold moon by night — same shadow rig. */}
+          <hemisphereLight
+            args={daytime ? ['#bcd7ff', '#4a4436', 0.9] : ['#1a2440', '#0a0806', 0.55]}
+          />
           <directionalLight
             castShadow
-            position={[70, 130, -50]}
-            color="#b9cfff"
-            intensity={2.1}
+            position={daytime ? [95, 150, 55] : [70, 130, -50]}
+            color={daytime ? '#fff1d6' : '#b9cfff'}
+            intensity={daytime ? 2.0 : 2.1}
             shadow-mapSize={highQ ? [2048, 2048] : [1024, 1024]}
             shadow-camera-left={-170}
             shadow-camera-right={170}
@@ -426,8 +521,11 @@ export default function RealmApp() {
             shadow-bias={-0.0003}
             shadow-normalBias={0.6}
           />
-          <directionalLight position={[-140, 60, 90]} color="#ff9d5c" intensity={0.2} />
-          <Lightning />
+          {!daytime && (
+            <directionalLight position={[-140, 60, 90]} color="#ff9d5c" intensity={0.2} />
+          )}
+          {!daytime && <Lightning />}
+          {daytime && <DustMotes />}
           <ClimateAmbience />
           <Suspense fallback={null}>
             <Terrain realm={realm} />
@@ -439,20 +537,26 @@ export default function RealmApp() {
             <Wall wall={wall} />
             <KingdomLabels />
             <RealmCamera realm={realm} wall={wall} />
-            <Stars radius={380} depth={80} count={2200} factor={4} saturation={0} fade speed={0.5} />
-            {/* Real HDRI night lighting (bundled, no network fetch). */}
-            <Environment files={(suspend(nightHdri) as { default: string }).default} />
+            {!daytime && (
+              <Stars radius={380} depth={80} count={2200} factor={4} saturation={0} fade speed={0.5} />
+            )}
+            {/* Real HDRI image-based lighting (bundled, no network fetch). */}
+            <Environment
+              key={daytime ? 'day' : 'night'}
+              files={(suspend(() => hdriFor(daytime), ['realm-hdri', daytime]) as { default: string }).default}
+            />
             <EffectComposer multisampling={0}>
               {highQ ? (
                 <N8AO aoRadius={2.4} intensity={2.4} distanceFalloff={0.7} />
               ) : (
                 <></>
               )}
+              {/* Day: bloom nearly off (sunlit snow must not glow like neon). */}
               <Bloom
                 mipmapBlur
-                luminanceThreshold={0.82}
+                luminanceThreshold={daytime ? 0.96 : 0.82}
                 luminanceSmoothing={0.18}
-                intensity={0.75}
+                intensity={daytime ? 0.3 : 0.75}
               />
               <Vignette offset={0.22} darkness={0.72} />
             </EffectComposer>
@@ -475,6 +579,15 @@ export default function RealmApp() {
         <a className="realm-hud__back" href="#/">
           ← back to the galaxy
         </a>
+        <button
+          type="button"
+          className="realm-hud__time"
+          onClick={toggleDaytime}
+          aria-label={daytime ? 'Switch to night' : 'Switch to day'}
+          title={daytime ? 'Switch to night' : 'Switch to day'}
+        >
+          {daytime ? '☾ nightfall' : '☀ daybreak'}
+        </button>
         <div className="realm-hud__hint">
           <span className="hint--fine">drag to orbit · right-drag to pan · click a castle or the wall</span>
           <span className="hint--coarse">one finger to orbit · two to pan &amp; zoom · tap a castle</span>

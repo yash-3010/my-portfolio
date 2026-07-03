@@ -202,3 +202,10 @@ export const KINGDOM_AMBIENCE = {
   vale: { sky: new Color('#0d0b12'), fog: new Color('#171119') },
   rune: { sky: new Color('#0a0718'), fog: new Color('#150f28') },
 }
+
+/** Daylight grading per kingdom (light mode). */
+export const KINGDOM_AMBIENCE_DAY = {
+  frozen: { sky: new Color('#8fb0d8'), fog: new Color('#b4c8de') },
+  vale: { sky: new Color('#a8bfd8'), fog: new Color('#cfd2c2') },
+  rune: { sky: new Color('#98a7d4'), fog: new Color('#c0bfd8') },
+}

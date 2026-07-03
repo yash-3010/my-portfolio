@@ -92,6 +92,7 @@ const VEIN_VERTEX = /* glsl */ `
 
 const VEIN_FRAGMENT = /* glsl */ `
   uniform float uTime;
+  uniform float uDay;
   varying float vGlow;
   varying float vY;
   void main() {
@@ -102,6 +103,8 @@ const VEIN_FRAGMENT = /* glsl */ `
     // Quiet days barely whisper; busy days burn — otherwise 240 commit-days
     // of seed data read as a solid barcode.
     float alpha = (0.06 + 0.94 * pow(vGlow, 1.6)) * pulse;
+    // Daylight drowns the glow: veins fade to a faint shimmer by day.
+    alpha *= mix(1.0, 0.16, uDay);
     gl_FragColor = vec4(color * alpha, alpha);
   }
 `
@@ -117,7 +120,7 @@ export function Wall({ wall }: { wall: WallBuild }) {
   const veinMaterial = useMemo(
     () =>
       new ShaderMaterial({
-        uniforms: { uTime: { value: 0 } },
+        uniforms: { uTime: { value: 0 }, uDay: { value: 0 } },
         vertexShader: VEIN_VERTEX,
         fragmentShader: VEIN_FRAGMENT,
         blending: AdditiveBlending,
@@ -128,8 +131,11 @@ export function Wall({ wall }: { wall: WallBuild }) {
   )
   useEffect(() => () => veinMaterial.dispose(), [veinMaterial])
 
-  useFrame((state) => {
+  useFrame((state, delta) => {
     veinMaterial.uniforms.uTime.value = state.clock.getElapsedTime()
+    const target = useGalaxyStore.getState().daytime ? 1 : 0
+    const u = veinMaterial.uniforms.uDay
+    u.value += (target - u.value) * Math.min(1, delta * 2)
   })
 
   const walking = focus?.kind === 'wall'
