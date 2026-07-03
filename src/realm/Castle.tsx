@@ -1,9 +1,12 @@
-import { useMemo, useState } from 'react'
+import { Suspense, useMemo, useRef, useState } from 'react'
 import { BoxGeometry, ConeGeometry, CylinderGeometry, DoubleSide } from 'three'
+import type { PointLight } from 'three'
+import { useFrame } from '@react-three/fiber'
 import type { ThreeEvent } from '@react-three/fiber'
 import { Html, useCursor } from '@react-three/drei'
 import type { CastleSpec } from './realm'
 import { useGalaxyStore } from '../state/store'
+import { HeroCastleModel, useHeroHeight } from './Heroes'
 
 /**
  * One repo as a low-poly castle, composed from shared primitive geometries:
@@ -47,6 +50,43 @@ const TENT_STAR = '#d9c18a'
 const TENT_FORK = '#9aa3b2'
 const DRAG_THRESHOLD_PX = 8
 
+/** Flickering courtyard fire: emissive flame cone + dancing point light. */
+function Brazier({ s }: { s: number }) {
+  const lightRef = useRef<PointLight>(null)
+  useFrame((state) => {
+    const light = lightRef.current
+    if (!light) return
+    const t = state.clock.getElapsedTime()
+    light.intensity =
+      (7 + Math.sin(t * 11) * 1.6 + Math.sin(t * 23 + 1.7) * 1.1) * s
+  })
+  return (
+    <group position={[2.2 * s, 0.5, 1.4 * s]}>
+      <mesh geometry={BRAZIER_GEO} scale={s} position={[0, 0.2 * s, 0]}>
+        <meshStandardMaterial color="#3c3630" roughness={0.9} />
+      </mesh>
+      <mesh geometry={FLAME_GEO} scale={s} position={[0, 0.65 * s, 0]}>
+        <meshStandardMaterial
+          color="#ff7a2e"
+          emissive="#ff9d3c"
+          emissiveIntensity={2.6}
+        />
+      </mesh>
+      <pointLight
+        ref={lightRef}
+        color="#ff9d4c"
+        intensity={7}
+        distance={18 * s}
+        decay={2}
+        position={[0, 1.2 * s, 0]}
+      />
+    </group>
+  )
+}
+
+const BRAZIER_GEO = new CylinderGeometry(0.34, 0.24, 0.4, 6)
+const FLAME_GEO = new ConeGeometry(0.22, 0.62, 5)
+
 function mulberry(seed: number): () => number {
   let a = seed | 0
   return () => {
@@ -62,6 +102,7 @@ export function Castle({ spec }: { spec: CastleSpec }) {
   const s = spec.scale
   const hovered = useGalaxyStore((st) => st.hovered)
   const focus = useGalaxyStore((st) => st.focus)
+  const daytime = useGalaxyStore((st) => st.daytime)
   const setHovered = useGalaxyStore((st) => st.setHovered)
   const setFocus = useGalaxyStore((st) => st.setFocus)
   const [localHover, setLocalHover] = useState(false)
@@ -107,8 +148,128 @@ export function Castle({ spec }: { spec: CastleSpec }) {
     setFocus({ kind: 'planet', name })
   }
 
+  const procedural = (
+    <ProceduralBody
+      parts={parts}
+      stone={stone}
+      stoneDark={stoneDark}
+      wallR={wallR}
+      banner={banner}
+      daytime={daytime}
+      s={s}
+    />
+  )
+
   return (
     <group position={spec.position} rotation={[0, spec.rotation, 0]}>
+      {spec.heroUrl ? (
+        // Scanned hero castle; the procedural kit stands in while it streams.
+        <Suspense fallback={procedural}>
+          <HeroBody url={spec.heroUrl} spec={spec} />
+        </Suspense>
+      ) : (
+        procedural
+      )}
+      <SharedFurniture spec={spec} parts={parts} daytime={daytime} s={s} wallR={wallR} />
+
+      {/* Invisible padded hit target and label live outside the swap. */}
+      <mesh
+        geometry={HIT_GEO}
+        scale={[5.6 * s, 9 * s, 5.6 * s]}
+        position={[0, 4.5 * s, 0]}
+        visible={false}
+        onClick={handleClick}
+        onPointerOver={(e) => {
+          e.stopPropagation()
+          setHovered(name)
+          setLocalHover(true)
+        }}
+        onPointerOut={() => {
+          setHovered(null)
+          setLocalHover(false)
+        }}
+      />
+
+      {showLabel && (
+        <Html
+          position={[0, 9.6 * s, 0]}
+          center
+          distanceFactor={42}
+          zIndexRange={[8, 0]}
+          style={{ pointerEvents: 'none' }}
+        >
+          <div
+            className="planet-label"
+            style={spec.highlight && !isHovered ? { opacity: 0.75 } : undefined}
+          >
+            <span className="planet-label__name">{name}</span>
+            <span className="planet-label__lang" style={{ color: spec.biome.color }}>
+              {spec.repo.language ?? spec.biome.language}
+            </span>
+          </div>
+        </Html>
+      )}
+    </group>
+  )
+}
+
+/** Scanned model + the language banner flying above it. */
+function HeroBody({ url, spec }: { url: string; spec: CastleSpec }) {
+  const footprint = spec.plateauRadius * 1.55
+  const height = useHeroHeight(url, footprint)
+  const banner = spec.biome.color
+  const s = spec.scale
+  return (
+    <group>
+      <HeroCastleModel url={url} footprint={footprint} />
+      <mesh geometry={POLE_GEO} scale={[1, 1.7 * s, 1]} position={[0, height + 0.85 * s, 0]}>
+        <meshStandardMaterial color="#3c4152" roughness={0.8} />
+      </mesh>
+      <mesh
+        geometry={BANNER_GEO}
+        scale={[1.05 * s, 0.9 * s, 1]}
+        position={[0.56 * s, height + 1.32 * s, 0]}
+      >
+        <meshStandardMaterial
+          color={banner}
+          emissive={banner}
+          emissiveIntensity={0.35}
+          side={DoubleSide}
+          flatShading
+        />
+      </mesh>
+    </group>
+  )
+}
+
+interface BodyParts {
+  towers: { angle: number; height: number }[]
+  tents: { angle: number; radius: number; size: number; star: boolean }[]
+  merlons: number[]
+  windows: { angle: number; y: number; lit: boolean }[]
+  scaffoldAngle: number
+}
+
+/** The procedural low-poly castle kit (also the hero model's fallback). */
+function ProceduralBody({
+  parts,
+  stone,
+  stoneDark,
+  wallR,
+  banner,
+  daytime,
+  s,
+}: {
+  parts: BodyParts
+  stone: string
+  stoneDark: string
+  wallR: number
+  banner: string
+  daytime: boolean
+  s: number
+}) {
+  return (
+    <group>
       {/* Plateau base pad */}
       <mesh
         geometry={BASE_GEO}
@@ -201,9 +362,9 @@ export function Castle({ spec }: { spec: CastleSpec }) {
             rotation={[0, -w.angle + Math.PI / 2, 0]}
           >
             <meshStandardMaterial
-              color="#241a10"
+              color={daytime ? '#141a24' : '#241a10'}
               emissive={WINDOW_GLOW}
-              emissiveIntensity={w.lit ? 2.4 : 0.05}
+              emissiveIntensity={daytime ? 0 : w.lit ? 2.4 : 0.05}
             />
           </mesh>
         ))}
@@ -229,6 +390,26 @@ export function Castle({ spec }: { spec: CastleSpec }) {
         </mesh>
       </group>
 
+    </group>
+  )
+}
+
+/** Tents, scaffold, and fire — rendered for both castle body variants. */
+function SharedFurniture({
+  spec,
+  parts,
+  daytime,
+  s,
+  wallR,
+}: {
+  spec: CastleSpec
+  parts: BodyParts
+  daytime: boolean
+  s: number
+  wallR: number
+}) {
+  return (
+    <group>
       {/* Garrison tents: stars are pale gold, forks grey */}
       {parts.tents.map((tent, i) => (
         <mesh
@@ -276,50 +457,17 @@ export function Castle({ spec }: { spec: CastleSpec }) {
             <meshStandardMaterial
               color="#ffd27d"
               emissive="#ffb85c"
-              emissiveIntensity={1.6}
+              emissiveIntensity={daytime ? 0.2 : 1.6}
             />
           </mesh>
-          <pointLight color="#ffb85c" intensity={9 * s} distance={16 * s} decay={2} position={[0, 5.7 * s, 0]} />
+          {!daytime && (
+            <pointLight color="#ffb85c" intensity={9 * s} distance={16 * s} decay={2} position={[0, 5.7 * s, 0]} />
+          )}
         </group>
       )}
 
-      {/* Invisible hit volume over the whole castle */}
-      <mesh
-        geometry={HIT_GEO}
-        scale={[5.6 * s, 9 * s, 5.6 * s]}
-        position={[0, 4.5 * s, 0]}
-        visible={false}
-        onClick={handleClick}
-        onPointerOver={(e) => {
-          e.stopPropagation()
-          setHovered(name)
-          setLocalHover(true)
-        }}
-        onPointerOut={() => {
-          setHovered(null)
-          setLocalHover(false)
-        }}
-      />
-
-      {showLabel && (
-        <Html
-          position={[0, 9.6 * s, 0]}
-          center
-          distanceFactor={42}
-          zIndexRange={[8, 0]}
-          style={{ pointerEvents: 'none' }}
-        >
-          <div
-            className="planet-label"
-            style={spec.highlight && !isHovered ? { opacity: 0.75 } : undefined}
-          >
-            <span className="planet-label__name">{name}</span>
-            <span className="planet-label__lang" style={{ color: spec.biome.color }}>
-              {spec.repo.language ?? spec.biome.language}
-            </span>
-          </div>
-        </Html>
-      )}
+      {/* Courtyard fire at night — highlight castles only (light budget). */}
+      {spec.highlight && !daytime && <Brazier s={s} />}
     </group>
   )
 }

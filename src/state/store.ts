@@ -27,6 +27,8 @@ interface GalaxyStore {
   introDone: boolean
   /** Contribution-day index under the camera while walking the Wall. */
   wallDay: number
+  /** Realm time-of-day (doubles as the site's light/dark theme). */
+  daytime: boolean
   setFocus: (focus: FocusTarget) => void
   clearFocus: () => void
   setHovered: (name: string | null) => void
@@ -34,6 +36,17 @@ interface GalaxyStore {
   setRevealed: () => void
   setIntroDone: () => void
   setWallDay: (i: number) => void
+  toggleDaytime: () => void
+}
+
+function initialDaytime(): boolean {
+  try {
+    const stored = window.localStorage.getItem('realm-daytime')
+    if (stored !== null) return stored === '1'
+  } catch {
+    /* storage unavailable (private mode) — fall through */
+  }
+  return window.matchMedia('(prefers-color-scheme: light)').matches
 }
 
 export const useGalaxyStore = create<GalaxyStore>((set, get) => ({
@@ -43,6 +56,7 @@ export const useGalaxyStore = create<GalaxyStore>((set, get) => ({
   revealed: false,
   introDone: false,
   wallDay: 364,
+  daytime: initialDaytime(),
   // Ignore focus requests until the intro flight lands — otherwise a click
   // during the establishing dolly opens a card the camera can't frame yet.
   setFocus: (focus) => {
@@ -55,6 +69,15 @@ export const useGalaxyStore = create<GalaxyStore>((set, get) => ({
   setRevealed: () => set({ revealed: true }),
   setIntroDone: () => set({ introDone: true }),
   setWallDay: (wallDay) => set({ wallDay }),
+  toggleDaytime: () => {
+    const daytime = !get().daytime
+    try {
+      window.localStorage.setItem('realm-daytime', daytime ? '1' : '0')
+    } catch {
+      /* non-fatal */
+    }
+    set({ daytime })
+  },
 }))
 
 /* ---------------------------------------------------------------- */
