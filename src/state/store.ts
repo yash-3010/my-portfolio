@@ -10,6 +10,8 @@ import { Vector3 } from 'three'
 export type FocusTarget =
   | { kind: 'sun' }
   | { kind: 'planet'; name: string }
+  /** Realm only: walking the contribution Wall. */
+  | { kind: 'wall' }
   | null
 
 interface GalaxyStore {
@@ -23,12 +25,15 @@ interface GalaxyStore {
   revealed: boolean
   /** Intro camera dolly has finished. */
   introDone: boolean
+  /** Contribution-day index under the camera while walking the Wall. */
+  wallDay: number
   setFocus: (focus: FocusTarget) => void
   clearFocus: () => void
   setHovered: (name: string | null) => void
   setReady: () => void
   setRevealed: () => void
   setIntroDone: () => void
+  setWallDay: (i: number) => void
 }
 
 export const useGalaxyStore = create<GalaxyStore>((set, get) => ({
@@ -37,6 +42,7 @@ export const useGalaxyStore = create<GalaxyStore>((set, get) => ({
   ready: false,
   revealed: false,
   introDone: false,
+  wallDay: 364,
   // Ignore focus requests until the intro flight lands — otherwise a click
   // during the establishing dolly opens a card the camera can't frame yet.
   setFocus: (focus) => {
@@ -48,6 +54,7 @@ export const useGalaxyStore = create<GalaxyStore>((set, get) => ({
   setReady: () => set({ ready: true }),
   setRevealed: () => set({ revealed: true }),
   setIntroDone: () => set({ introDone: true }),
+  setWallDay: (wallDay) => set({ wallDay }),
 }))
 
 /* ---------------------------------------------------------------- */

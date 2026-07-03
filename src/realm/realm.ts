@@ -2,7 +2,7 @@ import { Vector3 } from 'three'
 import type { GalaxyData, GalaxyRepo } from '../types'
 import { biomeFor, type Biome, type ConstellationId } from '../lib/palette'
 import { HIGHLIGHT_REPOS, classifyConstellation } from '../lib/galaxy'
-import { rawHeightAt, type FlattenSite } from './terrain'
+import { rawHeightAt, wallPathZ, type FlattenSite } from './terrain'
 import { REALM_SIZE } from './terrain'
 
 /**
@@ -84,8 +84,14 @@ function findSite(cx: number, cz: number, rand: () => number): { x: number; z: n
     const z = cz + Math.sin(a) * r
     if (Math.abs(x) > HALF * 0.62 || Math.abs(z) > HALF * 0.62) continue
     const h = rawHeightAt(x, z)
-    // Ideal ground sits around h=5: dry, but well under the snowline.
-    const score = Math.abs(h - 5) + (h < 1.5 ? 10 : 0) + (h > 10.5 ? 10 : 0)
+    // Ideal ground sits around h=5: dry, but well under the snowline —
+    // and never on top of the Wall's line.
+    const wallClearance = Math.abs(z - wallPathZ(x))
+    const score =
+      Math.abs(h - 5) +
+      (h < 1.5 ? 10 : 0) +
+      (h > 10.5 ? 10 : 0) +
+      (wallClearance < 9 ? 12 : 0)
     if (score < bestScore) {
       bestScore = score
       bestX = x

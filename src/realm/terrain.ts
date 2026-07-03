@@ -182,6 +182,21 @@ export function buildTerrainGeometry(sites: FlattenSite[] = []): BufferGeometry 
 /* Ambience per kingdom (fog/sky lerp targets)                       */
 /* ---------------------------------------------------------------- */
 
+/* ---------------------------------------------------------------- */
+/* The Wall (Phase 3)                                                */
+/* ---------------------------------------------------------------- */
+
+/** Half-span of the Wall along x. */
+export const WALL_SPAN_X = 85
+
+/** The Wall's z position at a given x — an arc bulging into the north.
+ * Runs through the foothills south of the ranges, so the Frozen Reach
+ * castles stand beyond the Wall. */
+export function wallPathZ(x: number): number {
+  const t = x / WALL_SPAN_X
+  return -18 - 8 * (1 - t * t)
+}
+
 export const KINGDOM_AMBIENCE = {
   frozen: { sky: new Color('#0c1424'), fog: new Color('#101b30') },
   vale: { sky: new Color('#171310'), fog: new Color('#241b13') },

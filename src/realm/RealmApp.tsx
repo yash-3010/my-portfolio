@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { CameraControls, Html } from '@react-three/drei'
+import { CameraControls, Environment, Html, Lightformer } from '@react-three/drei'
 import CameraControlsImpl from 'camera-controls'
 import { Box3, Color, Fog, Vector3 } from 'three'
 import type { GalaxyData } from '../types'
@@ -12,6 +12,7 @@ import githubJson from '../data/github.json'
 import {
   KINGDOM_AMBIENCE,
   REALM_SIZE,
+  WALL_SPAN_X,
   WATER_LEVEL,
   buildTerrainGeometry,
   climateAt,
@@ -19,6 +20,8 @@ import {
 } from './terrain'
 import { KINGDOM_ANCHORS, buildRealm, type CastleSpec, type RealmLayout } from './realm'
 import { Castle } from './Castle'
+import { buildWall, type WallBuild } from './wall'
+import { Wall } from './Wall'
 
 /**
  * The Living Realm — Phase 2 (see docs/realm-concept.md).
@@ -142,9 +145,16 @@ function isNarrowViewport(): boolean {
   return window.matchMedia('(max-width: 720px)').matches
 }
 
-function RealmCamera({ realm }: { realm: RealmLayout }) {
+function clamp01(v: number): number {
+  return v < 0 ? 0 : v > 1 ? 1 : v
+}
+
+function RealmCamera({ realm, wall }: { realm: RealmLayout; wall: WallBuild }) {
   const ref = useRef<CameraControlsImpl | null>(null)
   const focus = useGalaxyStore((s) => s.focus)
+  const camera = useThree((s) => s.camera)
+  const walking = focus?.kind === 'wall'
+  const walk = useRef({ active: false, current: 0, target: 0, lastDay: -1 })
 
   useEffect(() => {
     const controls = ref.current
@@ -165,13 +175,91 @@ function RealmCamera({ realm }: { realm: RealmLayout }) {
   }, [])
 
   // Terrain-following clamp: never let the camera dolly under the ground.
+  // (Skipped while walking the Wall — the rail owns the camera then.)
   useFrame(() => {
     const controls = ref.current
-    if (!controls) return
+    if (!controls || !controls.enabled) return
     controls.getPosition(tmpEye)
     const floor = heightAt(tmpEye.x, tmpEye.z, realm.sites) + 2.5
     if (tmpEye.y < floor) {
       void controls.setPosition(tmpEye.x, floor, tmpEye.z, false)
+    }
+  })
+
+  /* ------------------------------------------------------------ */
+  /* Walk the year: rail mode along the Wall's crown               */
+  /* ------------------------------------------------------------ */
+  useEffect(() => {
+    const controls = ref.current
+    if (!controls || !walking) return
+    const state = walk.current
+
+    // Enter at the rail point nearest the camera's current x.
+    controls.getPosition(tmpEye)
+    const startT = clamp01((tmpEye.x + WALL_SPAN_X) / (WALL_SPAN_X * 2)) * 0.97 + 0.01
+    state.current = startT
+    state.target = startT
+    const p = wall.rail.getPointAt(startT)
+    const ahead = wall.rail.getPointAt(Math.min(1, startT + 0.025))
+    let cancelled = false
+    void controls
+      .setLookAt(p.x, p.y + 2.4, p.z, ahead.x, ahead.y + 2.0, ahead.z, true)
+      .then(() => {
+        if (cancelled) return
+        controls.enabled = false
+        state.active = true
+      })
+
+    // Scrub input: wheel on desktop, vertical drag on touch.
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      state.target = clamp01(state.target + e.deltaY * 0.00022)
+    }
+    let dragY: number | null = null
+    const onDown = (e: PointerEvent) => {
+      dragY = e.clientY
+    }
+    const onMove = (e: PointerEvent) => {
+      if (dragY === null) return
+      state.target = clamp01(state.target + (dragY - e.clientY) * 0.0011)
+      dragY = e.clientY
+    }
+    const onUp = () => {
+      dragY = null
+    }
+    window.addEventListener('wheel', onWheel, { passive: false })
+    window.addEventListener('pointerdown', onDown)
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+
+    return () => {
+      cancelled = true
+      window.removeEventListener('wheel', onWheel)
+      window.removeEventListener('pointerdown', onDown)
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      state.active = false
+      controls.enabled = true
+      // Pull back to a viewing pose over where the walk ended.
+      const q = wall.rail.getPointAt(clamp01(state.current))
+      void controls.setLookAt(q.x, q.y + 13, q.z + 32, q.x, q.y, q.z, true)
+    }
+  }, [walking, wall])
+
+  useFrame((_, delta) => {
+    const state = walk.current
+    if (!state.active) return
+    state.current += (state.target - state.current) * Math.min(1, delta * 3.2)
+    const t = clamp01(state.current)
+    const p = wall.rail.getPointAt(t)
+    // Near-level gaze: crown line ahead, the realm falling away beside you.
+    const ahead = wall.rail.getPointAt(Math.min(1, t + 0.025))
+    camera.position.set(p.x, p.y + 2.4, p.z)
+    camera.lookAt(ahead.x, ahead.y + 2.0, ahead.z)
+    const day = Math.round(t * (wall.days.length - 1))
+    if (day !== state.lastDay) {
+      state.lastDay = day
+      useGalaxyStore.getState().setWallDay(day)
     }
   })
 
@@ -244,6 +332,7 @@ function KingdomLabels() {
 
 export default function RealmApp() {
   const realm = useMemo(() => buildRealm(galaxyData), [])
+  const wall = useMemo(() => buildWall(galaxyData.contributions), [])
   // The galaxy layout supplies the PlanetSpecs the shared ProjectCard reads.
   const galaxyLayout = useMemo(() => buildGalaxy(galaxyData), [])
   const focused = useGalaxyStore((s) => s.focus !== null)
@@ -301,8 +390,31 @@ export default function RealmApp() {
           {realm.castles.map((castle) => (
             <Castle key={castle.repo.name} spec={castle} />
           ))}
+          <Wall wall={wall} />
           <KingdomLabels />
-          <RealmCamera realm={realm} />
+          <RealmCamera realm={realm} wall={wall} />
+          {/* Procedural sky reflections for the ice (no asset downloads). */}
+          <Environment resolution={64}>
+            <Lightformer
+              intensity={2}
+              color="#bcd6ff"
+              position={[0, 60, -120]}
+              scale={[220, 50, 1]}
+            />
+            <Lightformer
+              form="circle"
+              intensity={1.4}
+              color="#ffd9a8"
+              position={[-120, 50, 70]}
+              scale={[70, 70, 1]}
+            />
+            <Lightformer
+              intensity={0.6}
+              color="#4c5a88"
+              position={[110, 25, 90]}
+              scale={[90, 34, 1]}
+            />
+          </Environment>
         </Canvas>
       </div>
 
@@ -322,12 +434,52 @@ export default function RealmApp() {
           ← back to the galaxy
         </a>
         <div className="realm-hud__hint">
-          <span className="hint--fine">drag to orbit · right-drag to pan · click a castle</span>
+          <span className="hint--fine">drag to orbit · right-drag to pan · click a castle or the wall</span>
           <span className="hint--coarse">one finger to orbit · two to pan &amp; zoom · tap a castle</span>
         </div>
       </div>
 
+      <WallReadout wall={wall} />
       <ProjectCard data={galaxyData} layout={galaxyLayout} />
+    </div>
+  )
+}
+
+/* ---------------------------------------------------------------- */
+/* Walk-the-year readout                                             */
+/* ---------------------------------------------------------------- */
+
+function WallReadout({ wall }: { wall: WallBuild }) {
+  const walking = useGalaxyStore((s) => s.focus?.kind === 'wall')
+  const idx = useGalaxyStore((s) => s.wallDay)
+  if (!walking) return null
+  const day = wall.days[Math.min(idx, wall.days.length - 1)]
+  const date = new Date(`${day.date}T00:00:00Z`).toLocaleDateString('en-US', {
+    weekday: 'short',
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: 'UTC',
+  })
+  return (
+    <div className="wall-hud glass" role="status" aria-live="polite">
+      <div className="wall-hud__date">{date}</div>
+      <div className="wall-hud__count">
+        {day.count} commit{day.count === 1 ? '' : 's'}
+      </div>
+      <div className="wall-hud__bar" aria-hidden="true">
+        <div style={{ width: `${Math.round((day.count / wall.maxCount) * 100)}%` }} />
+      </div>
+      <div className="wall-hud__hint">
+        <span className="hint--fine">scroll to walk the year · esc to leave</span>
+        <span className="hint--coarse">drag up &amp; down to walk the year</span>
+      </div>
+      <button
+        className="btn"
+        onClick={() => useGalaxyStore.getState().clearFocus()}
+      >
+        leave the wall
+      </button>
     </div>
   )
 }
