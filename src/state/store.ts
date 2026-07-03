@@ -29,6 +29,8 @@ interface GalaxyStore {
   wallDay: number
   /** Realm time-of-day (doubles as the site's light/dark theme). */
   daytime: boolean
+  /** Realm cinematic intro rail is playing (input + focus suspended). */
+  cinema: boolean
   setFocus: (focus: FocusTarget) => void
   clearFocus: () => void
   setHovered: (name: string | null) => void
@@ -37,6 +39,7 @@ interface GalaxyStore {
   setIntroDone: () => void
   setWallDay: (i: number) => void
   toggleDaytime: () => void
+  setCinema: (on: boolean) => void
 }
 
 function initialDaytime(): boolean {
@@ -57,10 +60,11 @@ export const useGalaxyStore = create<GalaxyStore>((set, get) => ({
   introDone: false,
   wallDay: 364,
   daytime: initialDaytime(),
-  // Ignore focus requests until the intro flight lands — otherwise a click
-  // during the establishing dolly opens a card the camera can't frame yet.
+  cinema: false,
+  // Ignore focus requests until the intro flight lands (and during the
+  // realm's cinematic rail) — the camera can't frame a card mid-flight.
   setFocus: (focus) => {
-    if (!get().introDone) return
+    if (!get().introDone || get().cinema) return
     set({ focus, hovered: null })
   },
   clearFocus: () => set({ focus: null }),
@@ -78,6 +82,7 @@ export const useGalaxyStore = create<GalaxyStore>((set, get) => ({
     }
     set({ daytime })
   },
+  setCinema: (cinema) => set({ cinema }),
 }))
 
 /* ---------------------------------------------------------------- */

@@ -8,6 +8,7 @@ import {
   AdditiveBlending,
   Box3,
   BufferGeometry,
+  CatmullRomCurve3,
   Color,
   Float32BufferAttribute,
   Fog,
@@ -45,13 +46,14 @@ import { HeroTrees } from './Heroes'
 import { Lightning } from './Lightning'
 import { makeNoiseNormalMap } from './textures'
 
-/** Lazily-created HDRI module promises (each is its own code-split chunk). */
+/** Night lighting: small bundled HDRI (its own code-split chunk). */
 let nightHdri: Promise<{ default: string }> | null = null
-let dawnHdri: Promise<{ default: string }> | null = null
-function hdriFor(daytime: boolean) {
-  if (daytime) return (dawnHdri ??= import('@pmndrs/assets/hdri/dawn.exr'))
+function getNightHdri() {
   return (nightHdri ??= import('@pmndrs/assets/hdri/night.exr'))
 }
+
+/** Day sky: real overcast HDRI (CC0 Poly Haven), fetched on demand. */
+const QUARRY_SKY = `${import.meta.env.BASE_URL}assets/realm/quarry_cloudy_1k.exr`
 
 /**
  * The Living Realm — Phase 2 (see docs/realm-concept.md).
@@ -290,8 +292,7 @@ function ClimateAmbience() {
 
   useFrame((_, delta) => {
     const fog = scene.fog as Fog | null
-    const bg = scene.background as Color | null
-    if (!fog || !bg) return
+    if (!fog) return
     const { frozen, vale, rune } = climateAt(camera.position.x, camera.position.z)
     const A = useGalaxyStore.getState().daytime ? KINGDOM_AMBIENCE_DAY : KINGDOM_AMBIENCE
     skyTarget.setRGB(
@@ -305,8 +306,11 @@ function ClimateAmbience() {
       A.frozen.fog.b * frozen + A.vale.fog.b * vale + A.rune.fog.b * rune,
     )
     // Ease everything — toggling time-of-day sweeps rather than snaps.
+    // By day the background is the HDRI texture, so only tint it when it's
+    // still a plain color (night / transition).
     const k = Math.min(1, delta * 2)
-    bg.lerp(skyTarget, k)
+    const bg = scene.background
+    if (bg instanceof Color) bg.lerp(skyTarget, k)
     fog.color.lerp(fogTarget, k)
     const daytime = useGalaxyStore.getState().daytime
     const nearT = daytime ? 300 : 230
@@ -325,6 +329,52 @@ const tmpEye = new Vector3()
 const tmpDir = new Vector3()
 const tmpTarget = new Vector3()
 
+/* ---------------------------------------------------------------- */
+/* Cinematic intro rail (Phase 4): a title-sequence flyover — south  */
+/* coast, low over the Vale, across the Runelands, a run along the   */
+/* Wall, then rising to reveal the whole realm.                      */
+/* ---------------------------------------------------------------- */
+
+const CINEMA_SECONDS = 34
+
+const CINEMA_EYE = new CatmullRomCurve3(
+  [
+    new Vector3(0, 62, 235),
+    new Vector3(-95, 24, 110),
+    new Vector3(-58, 13, 58),
+    new Vector3(-2, 17, 72),
+    new Vector3(70, 15, 62),
+    new Vector3(96, 20, -2),
+    new Vector3(58, 21, -16),
+    new Vector3(0, 25, -6),
+    new Vector3(-58, 27, -16),
+    new Vector3(-42, 62, 44),
+    new Vector3(0, 95, 189),
+  ],
+  false,
+  'catmullrom',
+  0.35,
+)
+
+const CINEMA_LOOK = new CatmullRomCurve3(
+  [
+    new Vector3(0, 6, 60),
+    new Vector3(-62, 9, 42),
+    new Vector3(-62, 8, 42),
+    new Vector3(28, 7, 42),
+    new Vector3(62, 9, 42),
+    new Vector3(34, 13, -22),
+    new Vector3(0, 15, -28),
+    new Vector3(-38, 13, -26),
+    new Vector3(-10, 11, -44),
+    new Vector3(0, 5, -18),
+    new Vector3(0, 4, -20),
+  ],
+  false,
+  'catmullrom',
+  0.35,
+)
+
 function isNarrowViewport(): boolean {
   return window.matchMedia('(max-width: 720px)').matches
 }
@@ -336,9 +386,47 @@ function clamp01(v: number): number {
 function RealmCamera({ realm, wall }: { realm: RealmLayout; wall: WallBuild }) {
   const ref = useRef<CameraControlsImpl | null>(null)
   const focus = useGalaxyStore((s) => s.focus)
-  const camera = useThree((s) => s.camera)
+  const cinema = useGalaxyStore((s) => s.cinema)
   const walking = focus?.kind === 'wall'
   const walk = useRef({ active: false, current: 0, target: 0, lastDay: -1 })
+  const rail = useRef({ active: false, p: 0 })
+
+  /* Cinematic rail: owns the camera completely while playing. */
+  useEffect(() => {
+    const controls = ref.current
+    if (!controls || !cinema) return
+    controls.enabled = false
+    rail.current = { active: true, p: 0 }
+    return () => {
+      rail.current.active = false
+      controls.enabled = true
+      // Land on the overview pose whether it finished or was skipped.
+      void controls.setLookAt(0, 95, HALF * 1.35, 0, 4, -20, true)
+    }
+  }, [cinema])
+
+  useFrame((_, delta) => {
+    const r = rail.current
+    if (!r.active) return
+    const controls = ref.current
+    if (!controls) return
+    r.p = Math.min(1, r.p + delta / CINEMA_SECONDS)
+    // Smooth start/finish, brisk middle.
+    const pe = r.p * r.p * (3 - 2 * r.p)
+    CINEMA_EYE.getPointAt(pe, tmpEye)
+    CINEMA_LOOK.getPointAt(pe, tmpTarget)
+    // Never clip into the terrain, whatever the spline does.
+    const floor = heightAt(tmpEye.x, tmpEye.z, realm.sites) + 2.4
+    if (tmpEye.y < floor) tmpEye.y = floor
+    // Drive the camera THROUGH camera-controls: its update() re-applies its
+    // own pose every frame (even when disabled), so writing camera.position
+    // directly gets reverted one subscriber later.
+    controls.setLookAt(tmpEye.x, tmpEye.y, tmpEye.z, tmpTarget.x, tmpTarget.y, tmpTarget.z, false)
+    if (r.p >= 1) {
+      r.active = false
+      useGalaxyStore.getState().setCinema(false)
+    }
+  })
 
   useEffect(() => {
     const controls = ref.current
@@ -433,13 +521,15 @@ function RealmCamera({ realm, wall }: { realm: RealmLayout; wall: WallBuild }) {
   useFrame((_, delta) => {
     const state = walk.current
     if (!state.active) return
+    const controls = ref.current
+    if (!controls) return
     state.current += (state.target - state.current) * Math.min(1, delta * 3.2)
     const t = clamp01(state.current)
     const p = wall.rail.getPointAt(t)
     // Near-level gaze: crown line ahead, the realm falling away beside you.
+    // (Through camera-controls — see the cinema rail note above.)
     const ahead = wall.rail.getPointAt(Math.min(1, t + 0.025))
-    camera.position.set(p.x, p.y + 2.4, p.z)
-    camera.lookAt(ahead.x, ahead.y + 2.0, ahead.z)
+    controls.setLookAt(p.x, p.y + 2.4, p.z, ahead.x, ahead.y + 2.0, ahead.z, false)
     const day = Math.round(t * (wall.days.length - 1))
     if (day !== state.lastDay) {
       state.lastDay = day
@@ -521,30 +611,41 @@ export default function RealmApp() {
   const galaxyLayout = useMemo(() => buildGalaxy(galaxyData), [])
   const focused = useGalaxyStore((s) => s.focus !== null)
   const daytime = useGalaxyStore((s) => s.daytime)
+  const cinema = useGalaxyStore((s) => s.cinema)
   const toggleDaytime = useGalaxyStore((s) => s.toggleDaytime)
   const pointerDown = useRef({ x: 0, y: 0 })
   // Desktop gets the full treatment; coarse-pointer devices skip AO and
   // halve the forest + shadow resolution.
   const highQ = useMemo(() => window.matchMedia('(pointer: fine)').matches, [])
 
-  // The realm has no loading screen or intro rail yet: unlock focus
-  // immediately, and clear any focus carried over from the galaxy.
+  // Unlock focus immediately, clear anything carried over from the galaxy,
+  // and roll the title-sequence flyover.
   useEffect(() => {
     const store = useGalaxyStore.getState()
     store.setReady()
     store.setRevealed()
     store.setIntroDone()
     store.clearFocus()
-    return () => useGalaxyStore.getState().clearFocus()
+    store.setCinema(true)
+    return () => {
+      const s = useGalaxyStore.getState()
+      s.clearFocus()
+      s.setCinema(false)
+    }
   }, [])
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') useGalaxyStore.getState().clearFocus()
+      if (e.key !== 'Escape') return
+      const store = useGalaxyStore.getState()
+      if (store.cinema) store.setCinema(false)
+      else store.clearFocus()
     }
     const onPointerDown = (e: PointerEvent) => {
       pointerDown.current.x = e.clientX
       pointerDown.current.y = e.clientY
+      // Any tap skips the flyover.
+      if (useGalaxyStore.getState().cinema) useGalaxyStore.getState().setCinema(false)
     }
     window.addEventListener('keydown', onKeyDown)
     window.addEventListener('pointerdown', onPointerDown)
@@ -609,10 +710,17 @@ export default function RealmApp() {
             {!daytime && (
               <Stars radius={380} depth={80} count={2200} factor={4} saturation={0} fade speed={0.5} />
             )}
-            {/* Real HDRI image-based lighting (bundled, no network fetch). */}
+            {/* HDRI image-based lighting; by day the cloudy sky is also the
+                visible background (GoT storm-light over the map). */}
             <Environment
               key={daytime ? 'day' : 'night'}
-              files={(suspend(() => hdriFor(daytime), ['realm-hdri', daytime]) as { default: string }).default}
+              background={daytime}
+              backgroundBlurriness={0.32}
+              files={
+                daytime
+                  ? QUARRY_SKY
+                  : (suspend(() => getNightHdri(), ['realm-hdri-night']) as { default: string }).default
+              }
             />
             <EffectComposer multisampling={0}>
               {highQ ? (
@@ -633,7 +741,24 @@ export default function RealmApp() {
         </Canvas>
       </div>
 
-      <div className={`realm-hud${focused ? ' realm-hud--focused' : ''}`}>
+      {/* Letterbox bars + skip during the flyover */}
+      {cinema && (
+        <div className="realm-cinema">
+          <div className="realm-cinema__bar realm-cinema__bar--top" aria-hidden="true" />
+          <div className="realm-cinema__bar realm-cinema__bar--bottom" aria-hidden="true" />
+          <button
+            type="button"
+            className="realm-cinema__skip"
+            onClick={() => useGalaxyStore.getState().setCinema(false)}
+          >
+            skip ▸
+          </button>
+        </div>
+      )}
+
+      <div
+        className={`realm-hud${focused ? ' realm-hud--focused' : ''}${cinema ? ' realm-hud--cinema' : ''}`}
+      >
         <div className="realm-hud__brand">
           <h1 className="hud__name">THE LIVING REALM</h1>
           <p className="hud__sub">every repo is a castle</p>
@@ -656,6 +781,13 @@ export default function RealmApp() {
           title={daytime ? 'Switch to night' : 'Switch to day'}
         >
           {daytime ? '☾ nightfall' : '☀ daybreak'}
+        </button>
+        <button
+          type="button"
+          className="realm-hud__replay"
+          onClick={() => useGalaxyStore.getState().setCinema(true)}
+        >
+          ↻ replay the flyover
         </button>
         <div className="realm-hud__hint">
           <span className="hint--fine">drag to orbit · right-drag to pan · click a castle or the wall</span>

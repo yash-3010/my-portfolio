@@ -1088,3 +1088,100 @@ button {
     translate: 50% 0;
   }
 }
+
+/* Realm Phase 4: cinematic flyover chrome */
+
+.realm-cinema {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  pointer-events: none;
+}
+
+.realm-cinema__bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 11vh;
+  background: #000;
+}
+
+.realm-cinema__bar--top {
+  top: 0;
+  animation: bar-in-top 900ms ease both;
+}
+
+.realm-cinema__bar--bottom {
+  bottom: 0;
+  animation: bar-in-bottom 900ms ease both;
+}
+
+@keyframes bar-in-top {
+  from { transform: translateY(-100%); }
+  to { transform: translateY(0); }
+}
+
+@keyframes bar-in-bottom {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+.realm-cinema__skip {
+  position: absolute;
+  right: calc(28px + env(safe-area-inset-right, 0px));
+  bottom: calc(3vh + env(safe-area-inset-bottom, 0px));
+  pointer-events: auto;
+  font: inherit;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #c3cae8;
+  background: rgba(10, 14, 32, 0.55);
+  border: 1px solid rgba(150, 170, 255, 0.25);
+  border-radius: 999px;
+  padding: 8px 18px;
+  cursor: pointer;
+}
+
+.realm-cinema__skip:hover {
+  color: #e8ecff;
+}
+
+/* Hide the HUD while the flyover plays (brand stays for the title feel) */
+.realm-hud--cinema .realm-hud__zones,
+.realm-hud--cinema .realm-hud__back,
+.realm-hud--cinema .realm-hud__time,
+.realm-hud--cinema .realm-hud__replay,
+.realm-hud--cinema .realm-hud__hint {
+  opacity: 0;
+  visibility: hidden;
+}
+
+.realm-hud__replay {
+  position: absolute;
+  top: calc(122px + env(safe-area-inset-top, 0px));
+  right: calc(32px + env(safe-area-inset-right, 0px));
+  pointer-events: auto;
+  font: inherit;
+  font-size: 12px;
+  color: #8b93b8;
+  border: 1px solid rgba(150, 170, 255, 0.16);
+  border-radius: 999px;
+  padding: 8px 16px;
+  background: rgba(10, 14, 32, 0.45);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  cursor: pointer;
+  transition: color 160ms ease, border-color 160ms ease;
+}
+
+.realm-hud__replay:hover {
+  color: #e8ecff;
+  border-color: rgba(232, 236, 255, 0.35);
+}
+
+@media (max-width: 720px) {
+  .realm-hud__replay {
+    display: none; /* mobile: replay via reload; corner budget is spent */
+  }
+}

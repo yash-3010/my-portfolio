@@ -1,6 +1,14 @@
-import { Suspense, useMemo, useRef, useState } from 'react'
+import {
+  Suspense,
+  createContext,
+  useContext,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
 import { BoxGeometry, ConeGeometry, CylinderGeometry, DoubleSide } from 'three'
-import type { PointLight } from 'three'
+import type { Group, PointLight } from 'three'
 import { useFrame } from '@react-three/fiber'
 import type { ThreeEvent } from '@react-three/fiber'
 import { Html, useCursor } from '@react-three/drei'
@@ -97,6 +105,80 @@ function mulberry(seed: number): () => number {
   }
 }
 
+/* ---------------------------------------------------------------- */
+/* Clockwork assembly (Phase 4)                                      */
+/* Castles stand unbuilt until the camera first comes near, then     */
+/* their pieces rise out of the plateau in a staggered sequence.     */
+/* ---------------------------------------------------------------- */
+
+const ASSEMBLY_RANGE = 85
+const ASSEMBLY_SECONDS = 2.2
+/** Castles stay built for the rest of the page visit. */
+const assembled = new Set<string>()
+
+interface AssemblyState {
+  t: number
+}
+
+const AssemblyCtx = createContext<AssemblyState>({ t: 1 })
+
+function AssemblyDriver({
+  spec,
+  children,
+}: {
+  spec: CastleSpec
+  children: ReactNode
+}) {
+  const state = useRef<AssemblyState>({
+    t: assembled.has(spec.repo.name) ? 1 : 0,
+  })
+  useFrame(({ camera }, delta) => {
+    const s = state.current
+    if (s.t >= 1) return
+    if (s.t === 0 && camera.position.distanceTo(spec.position) > ASSEMBLY_RANGE) return
+    s.t = Math.min(1, s.t + delta / ASSEMBLY_SECONDS)
+    if (s.t >= 1) assembled.add(spec.repo.name)
+  })
+  return <AssemblyCtx.Provider value={state.current}>{children}</AssemblyCtx.Provider>
+}
+
+function easeOutBack(k: number): number {
+  const c1 = 1.70158
+  const c3 = c1 + 1
+  return 1 + c3 * Math.pow(k - 1, 3) + c1 * Math.pow(k - 1, 2)
+}
+
+/**
+ * One assembly piece: buried below its resting place until its slot in the
+ * sequence, then rises with a slight overshoot.
+ */
+function Rise({
+  delay,
+  span = 0.3,
+  depth,
+  children,
+}: {
+  delay: number
+  span?: number
+  depth: number
+  children: ReactNode
+}) {
+  const assembly = useContext(AssemblyCtx)
+  const ref = useRef<Group>(null)
+  useFrame(() => {
+    const group = ref.current
+    if (!group) return
+    const k = Math.min(1, Math.max(0, (assembly.t - delay) / span))
+    group.visible = k > 0.001
+    group.position.y = (easeOutBack(k) - 1) * depth
+  })
+  return (
+    <group ref={ref} visible={assembly.t > delay}>
+      {children}
+    </group>
+  )
+}
+
 export function Castle({ spec }: { spec: CastleSpec }) {
   const name = spec.repo.name
   const s = spec.scale
@@ -162,15 +244,17 @@ export function Castle({ spec }: { spec: CastleSpec }) {
 
   return (
     <group position={spec.position} rotation={[0, spec.rotation, 0]}>
-      {spec.heroUrl ? (
-        // Scanned hero castle; the procedural kit stands in while it streams.
-        <Suspense fallback={procedural}>
-          <HeroBody url={spec.heroUrl} spec={spec} />
-        </Suspense>
-      ) : (
-        procedural
-      )}
-      <SharedFurniture spec={spec} parts={parts} daytime={daytime} s={s} wallR={wallR} />
+      <AssemblyDriver spec={spec}>
+        {spec.heroUrl ? (
+          // Scanned hero castle; the procedural kit stands in while it streams.
+          <Suspense fallback={procedural}>
+            <HeroBody url={spec.heroUrl} spec={spec} />
+          </Suspense>
+        ) : (
+          procedural
+        )}
+        <SharedFurniture spec={spec} parts={parts} daytime={daytime} s={s} wallR={wallR} />
+      </AssemblyDriver>
 
       {/* Invisible padded hit target and label live outside the swap. */}
       <mesh
@@ -221,23 +305,27 @@ function HeroBody({ url, spec }: { url: string; spec: CastleSpec }) {
   const s = spec.scale
   return (
     <group>
-      <HeroCastleModel url={url} footprint={footprint} />
-      <mesh geometry={POLE_GEO} scale={[1, 1.7 * s, 1]} position={[0, height + 0.85 * s, 0]}>
-        <meshStandardMaterial color="#3c4152" roughness={0.8} />
-      </mesh>
-      <mesh
-        geometry={BANNER_GEO}
-        scale={[1.05 * s, 0.9 * s, 1]}
-        position={[0.56 * s, height + 1.32 * s, 0]}
-      >
-        <meshStandardMaterial
-          color={banner}
-          emissive={banner}
-          emissiveIntensity={0.35}
-          side={DoubleSide}
-          flatShading
-        />
-      </mesh>
+      <Rise delay={0} span={0.7} depth={height * 0.9}>
+        <HeroCastleModel url={url} footprint={footprint} />
+      </Rise>
+      <Rise delay={0.72} span={0.28} depth={2.2 * s}>
+        <mesh geometry={POLE_GEO} scale={[1, 1.7 * s, 1]} position={[0, height + 0.85 * s, 0]}>
+          <meshStandardMaterial color="#3c4152" roughness={0.8} />
+        </mesh>
+        <mesh
+          geometry={BANNER_GEO}
+          scale={[1.05 * s, 0.9 * s, 1]}
+          position={[0.56 * s, height + 1.32 * s, 0]}
+        >
+          <meshStandardMaterial
+            color={banner}
+            emissive={banner}
+            emissiveIntensity={0.35}
+            side={DoubleSide}
+            flatShading
+          />
+        </mesh>
+      </Rise>
     </group>
   )
 }
@@ -271,31 +359,35 @@ function ProceduralBody({
   return (
     <group>
       {/* Plateau base pad */}
-      <mesh
-        geometry={BASE_GEO}
-        scale={[5.4 * s, 0.5, 5.4 * s]}
-        position={[0, 0.25, 0]}
-        castShadow
-        receiveShadow
-      >
-        <meshStandardMaterial color={stoneDark} flatShading roughness={0.95} />
-      </mesh>
+      <Rise delay={0} span={0.22} depth={1.2}>
+        <mesh
+          geometry={BASE_GEO}
+          scale={[5.4 * s, 0.5, 5.4 * s]}
+          position={[0, 0.25, 0]}
+          castShadow
+          receiveShadow
+        >
+          <meshStandardMaterial color={stoneDark} flatShading roughness={0.95} />
+        </mesh>
+      </Rise>
 
       {/* Hex bailey wall */}
-      <mesh
-        geometry={WALL_GEO}
-        scale={[wallR, 2.2 * s, wallR]}
-        position={[0, 1.1 * s + 0.5, 0]}
-        castShadow
-        receiveShadow
-      >
-        <meshStandardMaterial color={stone} flatShading roughness={0.9} />
-      </mesh>
+      <Rise delay={0.1} span={0.3} depth={2.7 * s}>
+        <mesh
+          geometry={WALL_GEO}
+          scale={[wallR, 2.2 * s, wallR]}
+          position={[0, 1.1 * s + 0.5, 0]}
+          castShadow
+          receiveShadow
+        >
+          <meshStandardMaterial color={stone} flatShading roughness={0.9} />
+        </mesh>
+      </Rise>
 
       {/* Battlements along the bailey rim */}
       {parts.merlons.map((angle, i) => (
+        <Rise key={`merlon-${i}`} delay={0.5 + i * 0.014} span={0.16} depth={0.9 * s}>
         <mesh
-          key={`merlon-${i}`}
           geometry={MERLON_GEO}
           scale={[0.42 * s, 0.34 * s, 0.28 * s]}
           position={[
@@ -308,6 +400,7 @@ function ProceduralBody({
         >
           <meshStandardMaterial color={stone} flatShading roughness={0.9} />
         </mesh>
+        </Rise>
       ))}
 
       {/* Wall towers with roofs in the language color */}
@@ -315,7 +408,8 @@ function ProceduralBody({
         const x = Math.cos(tower.angle) * wallR
         const z = Math.sin(tower.angle) * wallR
         return (
-          <group key={i} position={[x, 0.5, z]}>
+          <Rise key={i} delay={0.22 + i * 0.07} span={0.3} depth={tower.height + 1.4 * s}>
+          <group position={[x, 0.5, z]}>
             <mesh
               geometry={TOWER_GEO}
               scale={[0.9 * s, tower.height, 0.9 * s]}
@@ -334,10 +428,12 @@ function ProceduralBody({
               <meshStandardMaterial color={banner} flatShading roughness={0.7} />
             </mesh>
           </group>
+          </Rise>
         )
       })}
 
       {/* Central keep + roof + banner */}
+      <Rise delay={0.42} span={0.34} depth={6.4 * s}>
       <group position={[0, 0.5, 0]} rotation={[0, Math.PI / 4, 0]}>
         <mesh
           geometry={KEEP_GEO}
@@ -389,7 +485,7 @@ function ProceduralBody({
           />
         </mesh>
       </group>
-
+      </Rise>
     </group>
   )
 }
@@ -412,8 +508,8 @@ function SharedFurniture({
     <group>
       {/* Garrison tents: stars are pale gold, forks grey */}
       {parts.tents.map((tent, i) => (
+        <Rise key={`tent-${i}`} delay={0.66 + i * 0.03} span={0.2} depth={tent.size * 2}>
         <mesh
-          key={`tent-${i}`}
           geometry={TENT_GEO}
           scale={[tent.size, tent.size * 1.5, tent.size]}
           position={[
@@ -428,10 +524,12 @@ function SharedFurniture({
             roughness={0.95}
           />
         </mesh>
+        </Rise>
       ))}
 
       {/* Construction scaffold + warm lantern = recently active */}
       {spec.active && (
+        <Rise delay={0.8} span={0.2} depth={6 * s}>
         <group
           position={[
             Math.cos(parts.scaffoldAngle) * wallR * 0.55,
@@ -464,6 +562,7 @@ function SharedFurniture({
             <pointLight color="#ffb85c" intensity={9 * s} distance={16 * s} decay={2} position={[0, 5.7 * s, 0]} />
           )}
         </group>
+        </Rise>
       )}
 
       {/* Courtyard fire at night — highlight castles only (light budget). */}
