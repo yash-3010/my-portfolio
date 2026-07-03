@@ -47,6 +47,12 @@ export interface PlanetSpec {
   moons: MoonSpec[]
   /** Self-rotation speed, radians per second. */
   spin: number
+  /** Stable shader seed derived from the repo name. */
+  seed: number
+  /** Surface weathering 0..1 (repo age; 5+ years = fully weathered). */
+  age: number
+  /** Storm system intensity 0..1 (open issues; 12+ = full hurricane). */
+  storm: number
 }
 
 export interface GalaxyLayout {
@@ -181,7 +187,8 @@ export function buildGalaxy(data: GalaxyData): GalaxyLayout {
     const meta = CONSTELLATIONS[constellation]
     members.sort((a, b) => (orbitRank.get(a.name)! - orbitRank.get(b.name)!))
     members.forEach((repo, slot) => {
-      const rand = rng(hashString(repo.name))
+      const seedHash = hashString(repo.name)
+      const rand = rng(seedHash)
       const rank = orbitRank.get(repo.name)!
       const rankT = repos.length > 1 ? rank / (repos.length - 1) : 0
       const sizeT = Math.sqrt(repo.commits / maxCommits)
@@ -205,6 +212,9 @@ export function buildGalaxy(data: GalaxyData): GalaxyLayout {
         highlight: HIGHLIGHT_REPOS.has(repo.name),
         moons: buildMoons(repo, size, rand),
         spin: 0.05 + rand() * 0.12,
+        seed: (seedHash % 997) / 99.7,
+        age: Math.min(1, daysSince(repo.createdAt, now) / (365 * 5)),
+        storm: Math.min(1, (repo.openIssues ?? 0) / 12),
       })
     })
   }
@@ -237,4 +247,24 @@ export function moonPositionAt(m: MoonSpec, t: number, out: Vector3): Vector3 {
   const x = Math.cos(angle) * m.orbitRadius
   const z = Math.sin(angle) * m.orbitRadius
   return out.set(x, Math.sin(angle) * m.orbitRadius * Math.sin(m.inclination), z)
+}
+
+/* ---------------------------------------------------------------- */
+/* Contribution statistics                                           */
+/* ---------------------------------------------------------------- */
+
+/** Longest run of consecutive days with commits (drives the comet). */
+export function longestStreak(days: { count: number }[]): number {
+  let best = 0
+  let run = 0
+  for (const day of days) {
+    run = day.count > 0 ? run + 1 : 0
+    if (run > best) best = run
+  }
+  return best
+}
+
+/** Total commits across all rendered repos (drives the asteroid belt). */
+export function totalCommits(layout: GalaxyLayout): number {
+  return layout.planets.reduce((sum, p) => sum + p.repo.commits, 0)
 }

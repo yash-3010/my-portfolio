@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useGalaxyStore } from '../state/store'
 import type { GalaxyData } from '../types'
-import type { GalaxyLayout } from '../lib/galaxy'
+import { longestStreak, totalCommits, type GalaxyLayout } from '../lib/galaxy'
 import type { Biome } from '../lib/palette'
 
 /**
@@ -32,6 +32,9 @@ export function HUD({ data, layout }: { data: GalaxyData; layout: GalaxyLayout }
   }, [focused])
 
   const tagline = data.user.bio ? truncate(data.user.bio, TAGLINE_MAX) : null
+
+  const commitTotal = useMemo(() => totalCommits(layout), [layout])
+  const streak = useMemo(() => longestStreak(data.contributions), [data])
 
   const biomes = useMemo(() => {
     const seen = new Map<string, Biome>()
@@ -101,6 +104,10 @@ export function HUD({ data, layout }: { data: GalaxyData; layout: GalaxyLayout }
         ))}
         <p className="legend__caption">
           planet size = commits · orbit = recency · moons = stars &amp; forks
+        </p>
+        <p className="legend__caption">
+          asteroid belt = {commitTotal.toLocaleString()} commits
+          {streak > 0 && ` · comet = ${streak}-day streak`}
         </p>
       </motion.aside>
 

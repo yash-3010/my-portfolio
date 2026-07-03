@@ -1,13 +1,17 @@
-import { Suspense, useEffect, useRef } from 'react'
+import { Suspense, useEffect, useMemo, useRef } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
-import { Bloom, EffectComposer } from '@react-three/postprocessing'
+import { Bloom, EffectComposer, Vignette } from '@react-three/postprocessing'
 import type { GalaxyData } from '../types'
-import type { GalaxyLayout } from '../lib/galaxy'
+import { longestStreak, type GalaxyLayout } from '../lib/galaxy'
 import { galaxyClock, useGalaxyStore } from '../state/store'
 import { Starfield } from './Starfield'
+import { DeepSpace } from './DeepSpace'
 import { Sun } from './Sun'
 import { Planet } from './Planet'
 import { Orbits } from './Orbits'
+import { AsteroidBelt } from './AsteroidBelt'
+import { Comet } from './Comet'
+import { WarpStreaks } from './WarpStreaks'
 import { CameraRig } from './CameraRig'
 
 /**
@@ -25,6 +29,7 @@ function ClockTicker() {
 
 export function GalaxyCanvas({ data, layout }: { data: GalaxyData; layout: GalaxyLayout }) {
   const maxR = layout.maxOrbitRadius
+  const streak = useMemo(() => longestStreak(data.contributions), [data])
   const pointerDown = useRef({ x: 0, y: 0 })
 
   useEffect(() => {
@@ -66,12 +71,16 @@ export function GalaxyCanvas({ data, layout }: { data: GalaxyData; layout: Galax
         <ambientLight intensity={0.22} />
         <ClockTicker />
         <Suspense fallback={null}>
+          <DeepSpace radius={maxR} />
           <Starfield contributions={data.contributions} radius={maxR * 2.4} />
           <Sun user={data.user} />
           {layout.planets.map((spec) => (
             <Planet key={spec.repo.name} spec={spec} />
           ))}
           <Orbits planets={layout.planets} />
+          <AsteroidBelt layout={layout} />
+          {streak > 0 && <Comet maxR={maxR} streak={streak} />}
+          <WarpStreaks maxR={maxR} />
           <CameraRig layout={layout} />
           {/* Selective bloom unifies every glow source (sun, halos, active
               planets, starfield) into one consistent light bleed. */}
@@ -82,6 +91,7 @@ export function GalaxyCanvas({ data, layout }: { data: GalaxyData; layout: Galax
               luminanceSmoothing={0.25}
               intensity={0.85}
             />
+            <Vignette offset={0.18} darkness={0.72} />
           </EffectComposer>
         </Suspense>
       </Canvas>

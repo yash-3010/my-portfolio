@@ -61,6 +61,12 @@ export const useGalaxyStore = create<GalaxyStore>((set, get) => ({
  */
 export const galaxyClock = { t: 0, scale: 1 }
 
+/**
+ * Warp-arrival intro state. CameraRig writes it every frame while it drives
+ * the plunge; WarpStreaks reads it to fade the light corridor in and out.
+ */
+export const warpState = { active: false, progress: 0 }
+
 /** World positions of planets, written by Planet meshes each frame. */
 export const planetPositions = new Map<string, Vector3>()
 

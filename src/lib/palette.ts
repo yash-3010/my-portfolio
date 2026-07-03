@@ -9,25 +9,27 @@ export interface Biome {
   accent: string
   /** Emissive tint used when the planet is recently active. */
   glow: string
+  /** Procedural surface family: oceans+continents, banded gas, or ice. */
+  style: 'terra' | 'gas' | 'ice'
 }
 
 export const BIOMES: Record<string, Biome> = {
-  TypeScript: { language: 'TypeScript', color: '#4c8dff', accent: '#1e3a8a', glow: '#8ec5ff' },
-  JavaScript: { language: 'JavaScript', color: '#fbbf24', accent: '#92400e', glow: '#fde68a' },
-  Python: { language: 'Python', color: '#34d399', accent: '#065f46', glow: '#8af0c6' },
-  'Jupyter Notebook': { language: 'Jupyter Notebook', color: '#fb923c', accent: '#7c2d12', glow: '#fdba74' },
-  HTML: { language: 'HTML', color: '#fb7185', accent: '#881337', glow: '#fda4af' },
-  CSS: { language: 'CSS', color: '#a78bfa', accent: '#4c1d95', glow: '#c4b5fd' },
-  Go: { language: 'Go', color: '#22d3ee', accent: '#155e75', glow: '#a5f3fc' },
-  Rust: { language: 'Rust', color: '#e07840', accent: '#7c2d12', glow: '#fdba74' },
-  Shell: { language: 'Shell', color: '#94a3b8', accent: '#334155', glow: '#cbd5e1' },
-  C: { language: 'C', color: '#64748b', accent: '#1e293b', glow: '#94a3b8' },
-  'C++': { language: 'C++', color: '#f472b6', accent: '#831843', glow: '#f9a8d4' },
-  Java: { language: 'Java', color: '#f87171', accent: '#7f1d1d', glow: '#fca5a5' },
+  TypeScript: { language: 'TypeScript', style: 'terra', color: '#4c8dff', accent: '#1e3a8a', glow: '#8ec5ff' },
+  JavaScript: { language: 'JavaScript', style: 'gas', color: '#fbbf24', accent: '#92400e', glow: '#fde68a' },
+  Python: { language: 'Python', style: 'terra', color: '#34d399', accent: '#065f46', glow: '#8af0c6' },
+  'Jupyter Notebook': { language: 'Jupyter Notebook', style: 'gas', color: '#fb923c', accent: '#7c2d12', glow: '#fdba74' },
+  HTML: { language: 'HTML', style: 'terra', color: '#fb7185', accent: '#881337', glow: '#fda4af' },
+  CSS: { language: 'CSS', style: 'gas', color: '#a78bfa', accent: '#4c1d95', glow: '#c4b5fd' },
+  Go: { language: 'Go', style: 'ice', color: '#22d3ee', accent: '#155e75', glow: '#a5f3fc' },
+  Rust: { language: 'Rust', style: 'terra', color: '#e07840', accent: '#7c2d12', glow: '#fdba74' },
+  Shell: { language: 'Shell', style: 'ice', color: '#94a3b8', accent: '#334155', glow: '#cbd5e1' },
+  C: { language: 'C', style: 'ice', color: '#64748b', accent: '#1e293b', glow: '#94a3b8' },
+  'C++': { language: 'C++', style: 'gas', color: '#f472b6', accent: '#831843', glow: '#f9a8d4' },
+  Java: { language: 'Java', style: 'terra', color: '#f87171', accent: '#7f1d1d', glow: '#fca5a5' },
 }
 
 export const DEFAULT_BIOME: Biome = {
-  language: 'Other',
+  language: 'Other', style: 'ice',
   color: '#8b5cf6',
   accent: '#3b0764',
   glow: '#c4b5fd',

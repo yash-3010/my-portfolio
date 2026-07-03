@@ -4,7 +4,8 @@ import { CameraControls } from '@react-three/drei'
 import CameraControlsImpl from 'camera-controls'
 import { Vector3 } from 'three'
 import { SUN_RADIUS, planetPositionAt, type GalaxyLayout } from '../lib/galaxy'
-import { galaxyClock, getPlanetPosition, useGalaxyStore } from '../state/store'
+import { galaxyClock, getPlanetPosition, useGalaxyStore, warpState } from '../state/store'
+import { WARP_DURATION, WARP_EYE_FROM, WARP_EYE_TO } from './WarpStreaks'
 
 /* Reused scratch vectors — never allocated per frame / per flight. */
 const tmpPos = new Vector3()
@@ -83,9 +84,12 @@ export function CameraRig({ layout }: { layout: GalaxyLayout }) {
   }, [maxR])
 
   /* ------------------------------------------------------------ */
-  /* Intro dolly: starts when the loading screen begins to lift,   */
-  /* so the flight is actually seen instead of hidden behind it.   */
+  /* Warp arrival: starts when the loading screen begins to lift.  */
+  /* A straight-line plunge driven per-frame in useFrame below —   */
+  /* through the controls, because camera-controls re-applies its  */
+  /* stored pose every frame and reverts direct camera writes.     */
   /* ------------------------------------------------------------ */
+  const warpStartRef = useRef(-1)
   useEffect(() => {
     if (!revealed) return
     const controls = controlsRef.current
@@ -97,10 +101,9 @@ export function CameraRig({ layout }: { layout: GalaxyLayout }) {
       return
     }
     controls.enabled = false
-    void controls.setLookAt(0, maxR * 0.85, maxR * 1.55, 0, 0, 0, true).then(() => {
-      controls.enabled = true
-      useGalaxyStore.getState().setIntroDone()
-    })
+    warpStartRef.current = -1
+    warpState.progress = 0
+    warpState.active = true
   }, [revealed, maxR])
 
   /* ------------------------------------------------------------ */
@@ -154,9 +157,28 @@ export function CameraRig({ layout }: { layout: GalaxyLayout }) {
   /* position (plus the framing offset) so freeze-easing never     */
   /* drifts the framing. Never pin mid-flight or mid-gesture.      */
   /* ------------------------------------------------------------ */
-  useFrame(() => {
+  useFrame((state) => {
     const controls = controlsRef.current
     if (!controls) return
+
+    // Warp plunge: near-lightspeed entry easing into a long deceleration.
+    if (warpState.active) {
+      const et = state.clock.getElapsedTime()
+      if (warpStartRef.current < 0) warpStartRef.current = et
+      const t = Math.min(1, (et - warpStartRef.current) / WARP_DURATION)
+      const k = 1 - Math.pow(1 - t, 4) // easeOutQuart
+      const y = maxR * (WARP_EYE_FROM.y + (WARP_EYE_TO.y - WARP_EYE_FROM.y) * k)
+      const z = maxR * (WARP_EYE_FROM.z + (WARP_EYE_TO.z - WARP_EYE_FROM.z) * k)
+      void controls.setLookAt(0, y, z, 0, 0, 0, false)
+      warpState.progress = t
+      if (t >= 1) {
+        warpState.active = false
+        controls.enabled = true
+        useGalaxyStore.getState().setIntroDone()
+      }
+      return
+    }
+
     if (!arrivedRef.current || controls.active) return
     const f = useGalaxyStore.getState().focus
     if (f && f.kind === 'planet') {
