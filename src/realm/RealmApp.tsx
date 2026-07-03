@@ -11,7 +11,13 @@ import {
   Color,
   Float32BufferAttribute,
   Fog,
+  MeshStandardMaterial,
+  RepeatWrapping,
   ShaderMaterial,
+  SRGBColorSpace,
+  Texture,
+  TextureLoader,
+  Vector2,
   Vector3,
 } from 'three'
 import type { GalaxyData } from '../types'
@@ -35,6 +41,7 @@ import { Castle } from './Castle'
 import { buildWall, type WallBuild } from './wall'
 import { Wall } from './Wall'
 import { Trees } from './Trees'
+import { HeroTrees } from './Heroes'
 import { Lightning } from './Lightning'
 import { makeNoiseNormalMap } from './textures'
 
@@ -72,13 +79,79 @@ const KINGDOM_TINT: Record<CastleSpec['kingdom'], string> = {
 /* Terrain + sea                                                     */
 /* ---------------------------------------------------------------- */
 
+/** Load a ground texture (1K WebP, CC0 Poly Haven) set up for tiling. */
+function groundTexture(name: string): Texture {
+  const tex = new TextureLoader().load(
+    `${import.meta.env.BASE_URL}assets/realm/tex/${name}.webp`,
+  )
+  tex.wrapS = RepeatWrapping
+  tex.wrapT = RepeatWrapping
+  tex.colorSpace = SRGBColorSpace
+  return tex
+}
+
 function Terrain({ realm }: { realm: RealmLayout }) {
   const geometry = useMemo(() => buildTerrainGeometry(realm.sites), [realm])
   useEffect(() => () => geometry.dispose(), [geometry])
   const detail = useMemo(() => makeNoiseNormalMap(0x9e0a2d, 1.8), [])
+
+  // Real PBR ground: four CC0 textures blended by the per-vertex climate
+  // splat (snow / sand / forest / leaves), tinted by the vertex colors.
+  const material = useMemo(() => {
+    const forest = groundTexture('forest')
+    const snow = groundTexture('snow')
+    const sand = groundTexture('sand')
+    const leaves = groundTexture('leaves')
+    const mat = new MeshStandardMaterial({
+      vertexColors: true,
+      roughness: 0.95,
+      map: forest,
+      normalMap: detail,
+      normalScale: new Vector2(0.55, 0.55),
+    })
+    mat.onBeforeCompile = (shader) => {
+      shader.uniforms.uSnowMap = { value: snow }
+      shader.uniforms.uSandMap = { value: sand }
+      shader.uniforms.uLeavesMap = { value: leaves }
+      shader.vertexShader = shader.vertexShader
+        .replace(
+          '#include <common>',
+          '#include <common>\nattribute vec4 aSplat;\nvarying vec4 vSplat;',
+        )
+        .replace('#include <uv_vertex>', '#include <uv_vertex>\nvSplat = aSplat;')
+      shader.fragmentShader = shader.fragmentShader
+        .replace(
+          '#include <common>',
+          [
+            '#include <common>',
+            'uniform sampler2D uSnowMap;',
+            'uniform sampler2D uSandMap;',
+            'uniform sampler2D uLeavesMap;',
+            'varying vec4 vSplat;',
+          ].join('\n'),
+        )
+        .replace(
+          '#include <map_fragment>',
+          [
+            'vec4 splatW = vSplat / max(0.0001, vSplat.x + vSplat.y + vSplat.z + vSplat.w);',
+            'vec3 ground = texture2D( map, vMapUv ).rgb * splatW.z',
+            '  + texture2D( uSnowMap, vMapUv ).rgb * splatW.x',
+            '  + texture2D( uSandMap, vMapUv ).rgb * splatW.y',
+            '  + texture2D( uLeavesMap, vMapUv ).rgb * splatW.w;',
+            '// mid-gray textures need gain so climate tints stay luminous',
+            'diffuseColor.rgb *= ground * 1.3;',
+          ].join('\n'),
+        )
+    }
+    mat.customProgramCacheKey = () => 'realm-terrain-splat'
+    return mat
+  }, [detail])
+  useEffect(() => () => material.dispose(), [material])
+
   return (
     <mesh
       geometry={geometry}
+      material={material}
       castShadow
       receiveShadow
       onClick={(e) => {
@@ -86,14 +159,7 @@ function Terrain({ realm }: { realm: RealmLayout }) {
         // swallow the click before onPointerMissed sees it).
         if (e.delta < 8) useGalaxyStore.getState().clearFocus()
       }}
-    >
-      <meshStandardMaterial
-        vertexColors
-        roughness={0.93}
-        normalMap={detail}
-        normalScale={[0.55, 0.55]}
-      />
-    </mesh>
+    />
   )
 }
 
@@ -531,6 +597,9 @@ export default function RealmApp() {
             <Terrain realm={realm} />
             <Sea />
             <Trees realm={realm} count={highQ ? 2600 : 1300} />
+            <Suspense fallback={null}>
+              <HeroTrees realm={realm} />
+            </Suspense>
             {realm.castles.map((castle) => (
               <Castle key={castle.repo.name} spec={castle} />
             ))}

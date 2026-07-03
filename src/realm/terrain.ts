@@ -158,21 +158,38 @@ export function buildTerrainGeometry(sites: FlattenSite[] = []): BufferGeometry 
 
   const pos = geo.attributes.position
   const colors = new Float32Array(pos.count * 3)
+  // Ground-texture splat weights per vertex: snow / sand / forest / leaves.
+  const splat = new Float32Array(pos.count * 4)
   const uv = geo.attributes.uv
   const c = new Color()
+  const white = new Color('#ffffff')
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i)
     const z = pos.getZ(i)
     const h = heightAt(x, z, sites)
     pos.setY(i, h)
     colorAt(x, z, h, c)
+    // Textures carry the detail now; vertex color becomes a climate tint.
+    c.lerp(white, 0.35)
     colors[i * 3] = c.r
     colors[i * 3 + 1] = c.g
     colors[i * 3 + 2] = c.b
-    // World-space UVs: detail normal map repeats every ~5 world units.
+
+    const { frozen, rune } = climateAt(x, z)
+    const tint = tintFbm(x * 0.05, z * 0.05)
+    const snowline = 16 - frozen * 9 + tint * 2.5
+    const wSnow = smoothstep(snowline - 1.5, snowline + 3, h)
+    const wSand = 1 - smoothstep(WATER_LEVEL + 0.5, WATER_LEVEL + 1.8, h)
+    const rest = Math.max(0, 1 - wSnow - wSand)
+    splat[i * 4] = wSnow
+    splat[i * 4 + 1] = wSand
+    splat[i * 4 + 2] = rest * (1 - rune)
+    splat[i * 4 + 3] = rest * rune
+    // World-space UVs: ground textures repeat every ~5 world units.
     uv.setXY(i, x * 0.2, z * 0.2)
   }
   geo.setAttribute('color', new Float32BufferAttribute(colors, 3))
+  geo.setAttribute('aSplat', new Float32BufferAttribute(splat, 4))
   geo.computeVertexNormals()
   return geo
 }

@@ -30,6 +30,15 @@ export interface CastleSpec {
   highlight: boolean
   /** Base rotation of the whole castle, radians. */
   rotation: number
+  /** Optional scanned hero model (public URL); procedural castle otherwise. */
+  heroUrl?: string
+}
+
+/** Hand-picked scanned castles for the flagship repo of each kingdom. */
+const HERO_MODELS: Record<string, string> = {
+  'pvcon-website': 'assets/realm/models/castle-vale.glb',
+  'langchain-learn': 'assets/realm/models/castle-rune.glb',
+  'my-file-crypto': 'assets/realm/models/castle-frozen.glb',
 }
 
 export interface RealmLayout {
@@ -143,6 +152,9 @@ export function buildRealm(data: GalaxyData): RealmLayout {
         active: isActive(repo, data.fetchedAt),
         highlight: HIGHLIGHT_REPOS.has(repo.name),
         rotation: rand() * Math.PI * 2,
+        heroUrl: HERO_MODELS[repo.name]
+          ? `${import.meta.env.BASE_URL}${HERO_MODELS[repo.name]}`
+          : undefined,
       })
     })
   }

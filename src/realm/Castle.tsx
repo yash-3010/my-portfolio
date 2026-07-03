@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { Suspense, useMemo, useRef, useState } from 'react'
 import { BoxGeometry, ConeGeometry, CylinderGeometry, DoubleSide } from 'three'
 import type { PointLight } from 'three'
 import { useFrame } from '@react-three/fiber'
@@ -6,6 +6,7 @@ import type { ThreeEvent } from '@react-three/fiber'
 import { Html, useCursor } from '@react-three/drei'
 import type { CastleSpec } from './realm'
 import { useGalaxyStore } from '../state/store'
+import { HeroCastleModel, useHeroHeight } from './Heroes'
 
 /**
  * One repo as a low-poly castle, composed from shared primitive geometries:
@@ -147,8 +148,128 @@ export function Castle({ spec }: { spec: CastleSpec }) {
     setFocus({ kind: 'planet', name })
   }
 
+  const procedural = (
+    <ProceduralBody
+      parts={parts}
+      stone={stone}
+      stoneDark={stoneDark}
+      wallR={wallR}
+      banner={banner}
+      daytime={daytime}
+      s={s}
+    />
+  )
+
   return (
     <group position={spec.position} rotation={[0, spec.rotation, 0]}>
+      {spec.heroUrl ? (
+        // Scanned hero castle; the procedural kit stands in while it streams.
+        <Suspense fallback={procedural}>
+          <HeroBody url={spec.heroUrl} spec={spec} />
+        </Suspense>
+      ) : (
+        procedural
+      )}
+      <SharedFurniture spec={spec} parts={parts} daytime={daytime} s={s} wallR={wallR} />
+
+      {/* Invisible padded hit target and label live outside the swap. */}
+      <mesh
+        geometry={HIT_GEO}
+        scale={[5.6 * s, 9 * s, 5.6 * s]}
+        position={[0, 4.5 * s, 0]}
+        visible={false}
+        onClick={handleClick}
+        onPointerOver={(e) => {
+          e.stopPropagation()
+          setHovered(name)
+          setLocalHover(true)
+        }}
+        onPointerOut={() => {
+          setHovered(null)
+          setLocalHover(false)
+        }}
+      />
+
+      {showLabel && (
+        <Html
+          position={[0, 9.6 * s, 0]}
+          center
+          distanceFactor={42}
+          zIndexRange={[8, 0]}
+          style={{ pointerEvents: 'none' }}
+        >
+          <div
+            className="planet-label"
+            style={spec.highlight && !isHovered ? { opacity: 0.75 } : undefined}
+          >
+            <span className="planet-label__name">{name}</span>
+            <span className="planet-label__lang" style={{ color: spec.biome.color }}>
+              {spec.repo.language ?? spec.biome.language}
+            </span>
+          </div>
+        </Html>
+      )}
+    </group>
+  )
+}
+
+/** Scanned model + the language banner flying above it. */
+function HeroBody({ url, spec }: { url: string; spec: CastleSpec }) {
+  const footprint = spec.plateauRadius * 1.55
+  const height = useHeroHeight(url, footprint)
+  const banner = spec.biome.color
+  const s = spec.scale
+  return (
+    <group>
+      <HeroCastleModel url={url} footprint={footprint} />
+      <mesh geometry={POLE_GEO} scale={[1, 1.7 * s, 1]} position={[0, height + 0.85 * s, 0]}>
+        <meshStandardMaterial color="#3c4152" roughness={0.8} />
+      </mesh>
+      <mesh
+        geometry={BANNER_GEO}
+        scale={[1.05 * s, 0.9 * s, 1]}
+        position={[0.56 * s, height + 1.32 * s, 0]}
+      >
+        <meshStandardMaterial
+          color={banner}
+          emissive={banner}
+          emissiveIntensity={0.35}
+          side={DoubleSide}
+          flatShading
+        />
+      </mesh>
+    </group>
+  )
+}
+
+interface BodyParts {
+  towers: { angle: number; height: number }[]
+  tents: { angle: number; radius: number; size: number; star: boolean }[]
+  merlons: number[]
+  windows: { angle: number; y: number; lit: boolean }[]
+  scaffoldAngle: number
+}
+
+/** The procedural low-poly castle kit (also the hero model's fallback). */
+function ProceduralBody({
+  parts,
+  stone,
+  stoneDark,
+  wallR,
+  banner,
+  daytime,
+  s,
+}: {
+  parts: BodyParts
+  stone: string
+  stoneDark: string
+  wallR: number
+  banner: string
+  daytime: boolean
+  s: number
+}) {
+  return (
+    <group>
       {/* Plateau base pad */}
       <mesh
         geometry={BASE_GEO}
@@ -269,6 +390,26 @@ export function Castle({ spec }: { spec: CastleSpec }) {
         </mesh>
       </group>
 
+    </group>
+  )
+}
+
+/** Tents, scaffold, and fire — rendered for both castle body variants. */
+function SharedFurniture({
+  spec,
+  parts,
+  daytime,
+  s,
+  wallR,
+}: {
+  spec: CastleSpec
+  parts: BodyParts
+  daytime: boolean
+  s: number
+  wallR: number
+}) {
+  return (
+    <group>
       {/* Garrison tents: stars are pale gold, forks grey */}
       {parts.tents.map((tent, i) => (
         <mesh
@@ -327,44 +468,6 @@ export function Castle({ spec }: { spec: CastleSpec }) {
 
       {/* Courtyard fire at night — highlight castles only (light budget). */}
       {spec.highlight && !daytime && <Brazier s={s} />}
-
-      {/* Invisible hit volume over the whole castle */}
-      <mesh
-        geometry={HIT_GEO}
-        scale={[5.6 * s, 9 * s, 5.6 * s]}
-        position={[0, 4.5 * s, 0]}
-        visible={false}
-        onClick={handleClick}
-        onPointerOver={(e) => {
-          e.stopPropagation()
-          setHovered(name)
-          setLocalHover(true)
-        }}
-        onPointerOut={() => {
-          setHovered(null)
-          setLocalHover(false)
-        }}
-      />
-
-      {showLabel && (
-        <Html
-          position={[0, 9.6 * s, 0]}
-          center
-          distanceFactor={42}
-          zIndexRange={[8, 0]}
-          style={{ pointerEvents: 'none' }}
-        >
-          <div
-            className="planet-label"
-            style={spec.highlight && !isHovered ? { opacity: 0.75 } : undefined}
-          >
-            <span className="planet-label__name">{name}</span>
-            <span className="planet-label__lang" style={{ color: spec.biome.color }}>
-              {spec.repo.language ?? spec.biome.language}
-            </span>
-          </div>
-        </Html>
-      )}
     </group>
   )
 }
