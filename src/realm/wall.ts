@@ -111,9 +111,11 @@ function buildFrames(days: ContributionDay[], maxCount: number): SegmentFrame[] 
   })
 }
 
-const ICE_DEEP = new Color('#7ba7d6')
-const ICE_BRIGHT = new Color('#d9eaff')
-const ICE_COMMIT = new Color('#9fd8f2')
+// Kept under the bloom threshold — the veins are the emissive element,
+// the ice body must not bloom into a barcode.
+const ICE_DEEP = new Color('#6d95c2')
+const ICE_BRIGHT = new Color('#b9cfe6')
+const ICE_COMMIT = new Color('#8fc3de')
 
 function buildBody(frames: SegmentFrame[], days: ContributionDay[], maxCount: number, segWidth: number): BufferGeometry {
   const parts: BufferGeometry[] = []
@@ -137,7 +139,7 @@ function buildBody(frames: SegmentFrame[], days: ContributionDay[], maxCount: nu
       // buried root, so the wall reads deep-blue at ground level.
       const yNorm = Math.min(1, Math.max(0, 1 - (f.topY - pos.getY(v)) / 13))
       color.copy(ICE_DEEP).lerp(ICE_BRIGHT, Math.pow(yNorm, 1.3))
-      tinted.copy(color).lerp(ICE_COMMIT, t * 0.45)
+      tinted.copy(color).lerp(ICE_COMMIT, t * 0.3)
       // Gentle, low-frequency tinting — strong per-block variation moirés
       // into stripes at overview distance.
       const shade = 0.97 + tintNoise(pos.getX(v) * 0.06, pos.getY(v) * 0.06) * 0.05

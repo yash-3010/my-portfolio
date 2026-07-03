@@ -99,7 +99,9 @@ const VEIN_FRAGMENT = /* glsl */ `
     vec3 hot = vec3(0.56, 0.88, 1.0);
     vec3 color = mix(dim, hot, vGlow);
     float pulse = 0.82 + 0.18 * sin(uTime * 1.1 + vY * 0.7 + vGlow * 6.0);
-    float alpha = (0.22 + 0.78 * vGlow) * pulse;
+    // Quiet days barely whisper; busy days burn — otherwise 240 commit-days
+    // of seed data read as a solid barcode.
+    float alpha = (0.06 + 0.94 * pow(vGlow, 1.6)) * pulse;
     gl_FragColor = vec4(color * alpha, alpha);
   }
 `
@@ -160,7 +162,7 @@ export function Wall({ wall }: { wall: WallBuild }) {
 
       {/* Ice body — deliberately high-fidelity: smooth shading, physical
           material, procedural normal detail, environment reflections. */}
-      <mesh geometry={wall.bodyGeometry}>
+      <mesh geometry={wall.bodyGeometry} castShadow receiveShadow>
         <meshPhysicalMaterial
           vertexColors
           roughness={0.36}

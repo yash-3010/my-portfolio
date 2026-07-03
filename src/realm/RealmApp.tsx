@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { Suspense, useEffect, useMemo, useRef } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { CameraControls, Environment, Html, Lightformer } from '@react-three/drei'
+import { CameraControls, Environment, Html, Stars } from '@react-three/drei'
+import { Bloom, EffectComposer, N8AO, Vignette } from '@react-three/postprocessing'
 import CameraControlsImpl from 'camera-controls'
+import { suspend } from 'suspend-react'
 import { Box3, Color, Fog, Vector3 } from 'three'
 import type { GalaxyData } from '../types'
 import { buildGalaxy } from '../lib/galaxy'
@@ -22,6 +24,11 @@ import { KINGDOM_ANCHORS, buildRealm, type CastleSpec, type RealmLayout } from '
 import { Castle } from './Castle'
 import { buildWall, type WallBuild } from './wall'
 import { Wall } from './Wall'
+import { Trees } from './Trees'
+import { Lightning } from './Lightning'
+import { makeNoiseNormalMap } from './textures'
+
+const nightHdri = import('@pmndrs/assets/hdri/night.exr')
 
 /**
  * The Living Realm — Phase 2 (see docs/realm-concept.md).
@@ -52,32 +59,52 @@ const KINGDOM_TINT: Record<CastleSpec['kingdom'], string> = {
 function Terrain({ realm }: { realm: RealmLayout }) {
   const geometry = useMemo(() => buildTerrainGeometry(realm.sites), [realm])
   useEffect(() => () => geometry.dispose(), [geometry])
+  const detail = useMemo(() => makeNoiseNormalMap(0x9e0a2d, 1.8), [])
   return (
     <mesh
       geometry={geometry}
+      castShadow
+      receiveShadow
       onClick={(e) => {
         // Clicking open ground dismisses the card (terrain would otherwise
         // swallow the click before onPointerMissed sees it).
         if (e.delta < 8) useGalaxyStore.getState().clearFocus()
       }}
     >
-      <meshStandardMaterial vertexColors flatShading roughness={0.95} />
+      <meshStandardMaterial
+        vertexColors
+        roughness={0.93}
+        normalMap={detail}
+        normalScale={[0.55, 0.55]}
+      />
     </mesh>
   )
 }
 
 function Sea() {
+  const normals = useMemo(() => {
+    const t = makeNoiseNormalMap(0x05ea, 1.1)
+    t.repeat.set(30, 30)
+    return t
+  }, [])
+  useFrame((_, delta) => {
+    normals.offset.x += delta * 0.008
+    normals.offset.y += delta * 0.0045
+  })
   return (
-    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, WATER_LEVEL, 0]}>
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, WATER_LEVEL, 0]} receiveShadow>
       <planeGeometry args={[REALM_SIZE * 2.2, REALM_SIZE * 2.2]} />
       <meshStandardMaterial
-        color="#274b74"
-        roughness={0.2}
-        metalness={0.15}
+        color="#0f2137"
+        roughness={0.14}
+        metalness={0.08}
+        normalMap={normals}
+        normalScale={[0.35, 0.35]}
         transparent
-        opacity={0.95}
-        emissive="#16345c"
-        emissiveIntensity={0.55}
+        opacity={0.96}
+        emissive="#081525"
+        emissiveIntensity={0.5}
+        envMapIntensity={0.35}
       />
     </mesh>
   )
@@ -337,6 +364,9 @@ export default function RealmApp() {
   const galaxyLayout = useMemo(() => buildGalaxy(galaxyData), [])
   const focused = useGalaxyStore((s) => s.focus !== null)
   const pointerDown = useRef({ x: 0, y: 0 })
+  // Desktop gets the full treatment; coarse-pointer devices skip AO and
+  // halve the forest + shadow resolution.
+  const highQ = useMemo(() => window.matchMedia('(pointer: fine)').matches, [])
 
   // The realm has no loading screen or intro rail yet: unlock focus
   // immediately, and clear any focus carried over from the galaxy.
@@ -370,6 +400,7 @@ export default function RealmApp() {
       <div className="canvas-wrap">
         <Canvas
           dpr={[1, 2]}
+          shadows
           camera={{ fov: 50, near: 0.5, far: 900, position: [0, 130, 320] }}
           gl={{ antialias: true, powerPreference: 'high-performance' }}
           onPointerMissed={(e) => {
@@ -378,43 +409,54 @@ export default function RealmApp() {
             if (Math.hypot(dx, dy) < 8) useGalaxyStore.getState().clearFocus()
           }}
         >
-          <hemisphereLight args={['#8ea4d8', '#2b2620', 0.75]} />
+          {/* Moonlight key with real shadows; faint warm western rim. */}
+          <hemisphereLight args={['#1a2440', '#0a0806', 0.55]} />
           <directionalLight
-            position={[-120, 140, 80]}
-            color="#ffd9a8"
-            intensity={2.9}
+            castShadow
+            position={[70, 130, -50]}
+            color="#b9cfff"
+            intensity={2.1}
+            shadow-mapSize={highQ ? [2048, 2048] : [1024, 1024]}
+            shadow-camera-left={-170}
+            shadow-camera-right={170}
+            shadow-camera-top={170}
+            shadow-camera-bottom={-170}
+            shadow-camera-near={10}
+            shadow-camera-far={500}
+            shadow-bias={-0.0003}
+            shadow-normalBias={0.6}
           />
+          <directionalLight position={[-140, 60, 90]} color="#ff9d5c" intensity={0.2} />
+          <Lightning />
           <ClimateAmbience />
-          <Terrain realm={realm} />
-          <Sea />
-          {realm.castles.map((castle) => (
-            <Castle key={castle.repo.name} spec={castle} />
-          ))}
-          <Wall wall={wall} />
-          <KingdomLabels />
-          <RealmCamera realm={realm} wall={wall} />
-          {/* Procedural sky reflections for the ice (no asset downloads). */}
-          <Environment resolution={64}>
-            <Lightformer
-              intensity={2}
-              color="#bcd6ff"
-              position={[0, 60, -120]}
-              scale={[220, 50, 1]}
-            />
-            <Lightformer
-              form="circle"
-              intensity={1.4}
-              color="#ffd9a8"
-              position={[-120, 50, 70]}
-              scale={[70, 70, 1]}
-            />
-            <Lightformer
-              intensity={0.6}
-              color="#4c5a88"
-              position={[110, 25, 90]}
-              scale={[90, 34, 1]}
-            />
-          </Environment>
+          <Suspense fallback={null}>
+            <Terrain realm={realm} />
+            <Sea />
+            <Trees realm={realm} count={highQ ? 2600 : 1300} />
+            {realm.castles.map((castle) => (
+              <Castle key={castle.repo.name} spec={castle} />
+            ))}
+            <Wall wall={wall} />
+            <KingdomLabels />
+            <RealmCamera realm={realm} wall={wall} />
+            <Stars radius={380} depth={80} count={2200} factor={4} saturation={0} fade speed={0.5} />
+            {/* Real HDRI night lighting (bundled, no network fetch). */}
+            <Environment files={(suspend(nightHdri) as { default: string }).default} />
+            <EffectComposer multisampling={0}>
+              {highQ ? (
+                <N8AO aoRadius={2.4} intensity={2.4} distanceFalloff={0.7} />
+              ) : (
+                <></>
+              )}
+              <Bloom
+                mipmapBlur
+                luminanceThreshold={0.82}
+                luminanceSmoothing={0.18}
+                intensity={0.75}
+              />
+              <Vignette offset={0.22} darkness={0.72} />
+            </EffectComposer>
+          </Suspense>
         </Canvas>
       </div>
 

@@ -12,7 +12,7 @@ import { makeFbm2D, makeRidged2D, smoothstep } from './noise'
 
 export const REALM_SIZE = 280
 export const WATER_LEVEL = 0
-const SEGMENTS = 116
+const SEGMENTS = 220
 const HALF = REALM_SIZE / 2
 
 const SEED_BASE = 0x0a11ce
@@ -145,33 +145,32 @@ export function heightAt(x: number, z: number, sites: FlattenSite[] = []): numbe
   return h
 }
 
-/** Build the faceted island geometry (non-indexed, per-face vertex colors). */
+/**
+ * Build the island geometry. Uplifted art direction: smooth-shaded,
+ * high-resolution, per-vertex colors blending softly between climates —
+ * a miniature-map look rather than faceted low-poly. World-space UVs feed
+ * a repeating detail normal map.
+ */
 export function buildTerrainGeometry(sites: FlattenSite[] = []): BufferGeometry {
-  const plane = new PlaneGeometry(REALM_SIZE, REALM_SIZE, SEGMENTS, SEGMENTS)
-  plane.rotateX(-Math.PI / 2)
+  const seg = SEGMENTS
+  const geo = new PlaneGeometry(REALM_SIZE, REALM_SIZE, seg, seg)
+  geo.rotateX(-Math.PI / 2)
 
-  const pos = plane.attributes.position
-  for (let i = 0; i < pos.count; i++) {
-    pos.setY(i, heightAt(pos.getX(i), pos.getZ(i), sites))
-  }
-
-  // Non-indexed so each face can carry a single flat color.
-  const geo = plane.toNonIndexed()
-  plane.dispose()
-
-  const p = geo.attributes.position
-  const colors = new Float32Array(p.count * 3)
+  const pos = geo.attributes.position
+  const colors = new Float32Array(pos.count * 3)
+  const uv = geo.attributes.uv
   const c = new Color()
-  for (let i = 0; i < p.count; i += 3) {
-    const cx = (p.getX(i) + p.getX(i + 1) + p.getX(i + 2)) / 3
-    const cz = (p.getZ(i) + p.getZ(i + 1) + p.getZ(i + 2)) / 3
-    const ch = (p.getY(i) + p.getY(i + 1) + p.getY(i + 2)) / 3
-    colorAt(cx, cz, ch, c)
-    for (let v = 0; v < 3; v++) {
-      colors[(i + v) * 3] = c.r
-      colors[(i + v) * 3 + 1] = c.g
-      colors[(i + v) * 3 + 2] = c.b
-    }
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i)
+    const z = pos.getZ(i)
+    const h = heightAt(x, z, sites)
+    pos.setY(i, h)
+    colorAt(x, z, h, c)
+    colors[i * 3] = c.r
+    colors[i * 3 + 1] = c.g
+    colors[i * 3 + 2] = c.b
+    // World-space UVs: detail normal map repeats every ~5 world units.
+    uv.setXY(i, x * 0.2, z * 0.2)
   }
   geo.setAttribute('color', new Float32BufferAttribute(colors, 3))
   geo.computeVertexNormals()
@@ -197,8 +196,9 @@ export function wallPathZ(x: number): number {
   return -18 - 8 * (1 - t * t)
 }
 
+/** Moonlit-night grading per kingdom (uplifted art direction). */
 export const KINGDOM_AMBIENCE = {
-  frozen: { sky: new Color('#0c1424'), fog: new Color('#101b30') },
-  vale: { sky: new Color('#171310'), fog: new Color('#241b13') },
-  rune: { sky: new Color('#130e22'), fog: new Color('#1b1430') },
+  frozen: { sky: new Color('#070d18'), fog: new Color('#0b1424') },
+  vale: { sky: new Color('#0d0b12'), fog: new Color('#171119') },
+  rune: { sky: new Color('#0a0718'), fog: new Color('#150f28') },
 }

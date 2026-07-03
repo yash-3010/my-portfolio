@@ -24,7 +24,11 @@ const BANNER_GEO = new BoxGeometry(1, 0.62, 0.04)
 const TENT_GEO = new ConeGeometry(1, 1, 5)
 const BEAM_GEO = new BoxGeometry(0.12, 1, 0.12)
 const LANTERN_GEO = new BoxGeometry(0.3, 0.3, 0.3)
+const MERLON_GEO = new BoxGeometry(1, 1, 1)
+const WINDOW_GEO = new BoxGeometry(0.22, 0.34, 0.06)
 const HIT_GEO = new CylinderGeometry(1, 1, 1, 8)
+
+const WINDOW_GLOW = '#ffbf6e'
 
 /** Kingdom stonework. */
 const STONE: Record<CastleSpec['kingdom'], string> = {
@@ -82,7 +86,14 @@ export function Castle({ spec }: { spec: CastleSpec }) {
       size: 0.5 + rand() * 0.28,
       star: i < spec.repo.stars,
     }))
-    return { towers, tents, scaffoldAngle: spec.rotation + Math.PI * 0.8 }
+    // Battlements around the bailey rim + lit keep windows (night detail).
+    const merlons = Array.from({ length: 14 }, (_, i) => (i * Math.PI * 2) / 14)
+    const windows = Array.from({ length: 6 }, (_, i) => ({
+      angle: (i * Math.PI * 2) / 4 + Math.PI / 4,
+      y: (2.1 + (i % 2) * 1.4) * s,
+      lit: rand() > 0.3,
+    }))
+    return { towers, tents, merlons, windows, scaffoldAngle: spec.rotation + Math.PI * 0.8 }
   }, [spec, s])
 
   const stone = STONE[spec.kingdom]
@@ -99,14 +110,44 @@ export function Castle({ spec }: { spec: CastleSpec }) {
   return (
     <group position={spec.position} rotation={[0, spec.rotation, 0]}>
       {/* Plateau base pad */}
-      <mesh geometry={BASE_GEO} scale={[5.4 * s, 0.5, 5.4 * s]} position={[0, 0.25, 0]}>
+      <mesh
+        geometry={BASE_GEO}
+        scale={[5.4 * s, 0.5, 5.4 * s]}
+        position={[0, 0.25, 0]}
+        castShadow
+        receiveShadow
+      >
         <meshStandardMaterial color={stoneDark} flatShading roughness={0.95} />
       </mesh>
 
       {/* Hex bailey wall */}
-      <mesh geometry={WALL_GEO} scale={[wallR, 2.2 * s, wallR]} position={[0, 1.1 * s + 0.5, 0]}>
+      <mesh
+        geometry={WALL_GEO}
+        scale={[wallR, 2.2 * s, wallR]}
+        position={[0, 1.1 * s + 0.5, 0]}
+        castShadow
+        receiveShadow
+      >
         <meshStandardMaterial color={stone} flatShading roughness={0.9} />
       </mesh>
+
+      {/* Battlements along the bailey rim */}
+      {parts.merlons.map((angle, i) => (
+        <mesh
+          key={`merlon-${i}`}
+          geometry={MERLON_GEO}
+          scale={[0.42 * s, 0.34 * s, 0.28 * s]}
+          position={[
+            Math.cos(angle) * wallR * 0.99,
+            2.2 * s + 0.5 + 0.17 * s,
+            Math.sin(angle) * wallR * 0.99,
+          ]}
+          rotation={[0, -angle, 0]}
+          castShadow
+        >
+          <meshStandardMaterial color={stone} flatShading roughness={0.9} />
+        </mesh>
+      ))}
 
       {/* Wall towers with roofs in the language color */}
       {parts.towers.map((tower, i) => {
@@ -114,10 +155,21 @@ export function Castle({ spec }: { spec: CastleSpec }) {
         const z = Math.sin(tower.angle) * wallR
         return (
           <group key={i} position={[x, 0.5, z]}>
-            <mesh geometry={TOWER_GEO} scale={[0.9 * s, tower.height, 0.9 * s]} position={[0, tower.height / 2, 0]}>
+            <mesh
+              geometry={TOWER_GEO}
+              scale={[0.9 * s, tower.height, 0.9 * s]}
+              position={[0, tower.height / 2, 0]}
+              castShadow
+              receiveShadow
+            >
               <meshStandardMaterial color={stone} flatShading roughness={0.9} />
             </mesh>
-            <mesh geometry={ROOF_GEO} scale={[1.22 * s, 1.3 * s, 1.22 * s]} position={[0, tower.height + 0.65 * s, 0]}>
+            <mesh
+              geometry={ROOF_GEO}
+              scale={[1.22 * s, 1.3 * s, 1.22 * s]}
+              position={[0, tower.height + 0.65 * s, 0]}
+              castShadow
+            >
               <meshStandardMaterial color={banner} flatShading roughness={0.7} />
             </mesh>
           </group>
@@ -126,10 +178,41 @@ export function Castle({ spec }: { spec: CastleSpec }) {
 
       {/* Central keep + roof + banner */}
       <group position={[0, 0.5, 0]} rotation={[0, Math.PI / 4, 0]}>
-        <mesh geometry={KEEP_GEO} scale={[1.9 * s, 4.6 * s, 1.9 * s]} position={[0, 2.3 * s, 0]}>
+        <mesh
+          geometry={KEEP_GEO}
+          scale={[1.9 * s, 4.6 * s, 1.9 * s]}
+          position={[0, 2.3 * s, 0]}
+          castShadow
+          receiveShadow
+        >
           <meshStandardMaterial color={stone} flatShading roughness={0.85} />
         </mesh>
-        <mesh geometry={ROOF_GEO} scale={[2.3 * s, 1.9 * s, 2.3 * s]} position={[0, 5.55 * s, 0]}>
+        {/* Lit keep windows — the warm night detail against the moonlight. */}
+        {parts.windows.map((w, i) => (
+          <mesh
+            key={`window-${i}`}
+            geometry={WINDOW_GEO}
+            scale={s}
+            position={[
+              Math.cos(w.angle) * 1.32 * s,
+              w.y,
+              Math.sin(w.angle) * 1.32 * s,
+            ]}
+            rotation={[0, -w.angle + Math.PI / 2, 0]}
+          >
+            <meshStandardMaterial
+              color="#241a10"
+              emissive={WINDOW_GLOW}
+              emissiveIntensity={w.lit ? 2.4 : 0.05}
+            />
+          </mesh>
+        ))}
+        <mesh
+          geometry={ROOF_GEO}
+          scale={[2.3 * s, 1.9 * s, 2.3 * s]}
+          position={[0, 5.55 * s, 0]}
+          castShadow
+        >
           <meshStandardMaterial color={banner} flatShading roughness={0.7} />
         </mesh>
         <mesh geometry={POLE_GEO} scale={[1, 2 * s, 1]} position={[0, 7.4 * s, 0]}>
