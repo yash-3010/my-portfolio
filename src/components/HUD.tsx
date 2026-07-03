@@ -35,6 +35,11 @@ export function HUD({ data, layout }: { data: GalaxyData; layout: GalaxyLayout }
 
   const commitTotal = useMemo(() => totalCommits(layout), [layout])
   const streak = useMemo(() => longestStreak(data.contributions), [data])
+  const moonCount = useMemo(
+    () => layout.planets.reduce((sum, p) => sum + p.moons.length, 0),
+    [layout],
+  )
+  const hasRing = useMemo(() => layout.planets.some((p) => p.ring), [layout])
 
   const biomes = useMemo(() => {
     const seen = new Map<string, Biome>()
@@ -72,6 +77,10 @@ export function HUD({ data, layout }: { data: GalaxyData; layout: GalaxyLayout }
         <h1 className="hud__name">{data.user.name.toUpperCase()}</h1>
         <p className="hud__sub">The Living Repo Galaxy</p>
         {tagline && <p className="hud__tagline">{tagline}</p>}
+        <p className="hud__telemetry">
+          3 stars · {layout.planets.length} planets · {moonCount} moons · belt
+          {streak > 0 && ' · comet'}
+        </p>
       </motion.div>
 
       {/* Top-right legend */}
@@ -108,6 +117,9 @@ export function HUD({ data, layout }: { data: GalaxyData; layout: GalaxyLayout }
         <p className="legend__caption">
           asteroid belt = {commitTotal.toLocaleString()} commits
           {streak > 0 && ` · comet = ${streak}-day streak`}
+        </p>
+        <p className="legend__caption">
+          green zone = pushed &lt; 60 days{hasRing && ' · ring = most-starred repo'}
         </p>
       </motion.aside>
 

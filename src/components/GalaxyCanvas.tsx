@@ -6,7 +6,10 @@ import { longestStreak, type GalaxyLayout } from '../lib/galaxy'
 import { galaxyClock, useGalaxyStore } from '../state/store'
 import { Starfield } from './Starfield'
 import { DeepSpace } from './DeepSpace'
+import { Skybox } from './Skybox'
 import { Sun } from './Sun'
+import { CompanionStars } from './CompanionStars'
+import { ActiveZone } from './ActiveZone'
 import { Planet } from './Planet'
 import { Orbits } from './Orbits'
 import { AsteroidBelt } from './AsteroidBelt'
@@ -71,9 +74,12 @@ export function GalaxyCanvas({ data, layout }: { data: GalaxyData; layout: Galax
         <ambientLight intensity={0.22} />
         <ClockTicker />
         <Suspense fallback={null}>
+          <Skybox radius={maxR * 4.8} />
           <DeepSpace radius={maxR} />
           <Starfield contributions={data.contributions} radius={maxR * 2.4} />
           <Sun user={data.user} />
+          <CompanionStars maxR={maxR} />
+          <ActiveZone layout={layout} />
           {layout.planets.map((spec) => (
             <Planet key={spec.repo.name} spec={spec} />
           ))}

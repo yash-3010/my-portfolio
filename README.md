@@ -17,7 +17,20 @@ hand-placed — it is all derived from live GitHub data:
 | Starfield band | My last 365 days of contributions — brighter stars = more commits that day |
 | Asteroid belt | One rock per commit, ringing the mid-system |
 | The comet | My longest consecutive-day commit streak, on an eccentric orbit with an anti-sunward tail |
+| Planetary ring | The most-starred repo wears a banded ring |
+| Green zone | A soft habitable-zone annulus spanning the orbits pushed in the last 60 days |
 | Deep space | A procedural Andromeda (plus a dwarf companion and nebulae) hanging beyond the starfield |
+
+The system is a hierarchical triple star: a small amber companion (star B)
+whirls tightly around the sun, and a coral dwarf (star C) circles the whole
+system far beyond the planets — zoom out to find it.
+
+### Optional photographic sky
+
+Drop an equirectangular Milky Way panorama (e.g. [ESO's eso0932a](https://www.eso.org/public/images/eso0932a/),
+CC-BY, credit ESO/S. Brunier) at `public/assets/skybox/milkyway.webp` (or
+`.jpg`, ~4096×2048 is plenty) and the scene wraps itself in it automatically;
+without the file the procedural sky stands alone.
 
 Click (or tap) a planet and the camera flies in; a card shows the repo's
 README summary, tech stack, stats, and links. Click the sun for the about-me

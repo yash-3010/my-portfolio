@@ -26,6 +26,14 @@ export interface MoonSpec {
   inclination: number
 }
 
+export interface RingSpec {
+  /** Inner/outer radius as multiples of the planet radius. */
+  inner: number
+  outer: number
+  /** Tilt away from the orbital plane, radians. */
+  tilt: number
+}
+
 export interface PlanetSpec {
   repo: GalaxyRepo
   biome: Biome
@@ -53,6 +61,8 @@ export interface PlanetSpec {
   age: number
   /** Storm system intensity 0..1 (open issues; 12+ = full hurricane). */
   storm: number
+  /** Planetary ring — worn by the most-starred repo (plus rare seeded extras). */
+  ring: RingSpec | null
 }
 
 export interface GalaxyLayout {
@@ -162,6 +172,8 @@ export function buildGalaxy(data: GalaxyData): GalaxyLayout {
   // Own repos only; skip empty husks with no commits.
   const repos = data.repos.filter((r) => r.commits > 0)
   const maxCommits = Math.max(1, ...repos.map((r) => r.commits))
+  // The most-starred repo wears the ring (Saturn of the system).
+  const maxStars = Math.max(0, ...repos.map((r) => r.stars))
 
   // Recency rank drives orbit distance: most recently pushed = innermost.
   const byRecency = [...repos].sort(
@@ -197,6 +209,9 @@ export function buildGalaxy(data: GalaxyData): GalaxyLayout {
       const slotT = members.length === 1 ? 0.5 : slot / (members.length - 1)
       const phase =
         meta.centerAngle + (slotT - 0.5) * meta.sectorWidth + (rand() - 0.5) * 0.22
+      // Drawn unconditionally so a star-count change can't reshuffle the layout.
+      const ringRoll = rand()
+      const ringed = (maxStars > 0 && repo.stars === maxStars) || ringRoll < 0.08
       planets.push({
         repo,
         biome: biomeFor(repo.language),
@@ -215,6 +230,13 @@ export function buildGalaxy(data: GalaxyData): GalaxyLayout {
         seed: (seedHash % 997) / 99.7,
         age: Math.min(1, daysSince(repo.createdAt, now) / (365 * 5)),
         storm: Math.min(1, (repo.openIssues ?? 0) / 12),
+        ring: ringed
+          ? {
+              inner: 1.45 + rand() * 0.2,
+              outer: 2.15 + rand() * 0.5,
+              tilt: 0.28 + (rand() - 0.5) * 0.4,
+            }
+          : null,
       })
     })
   }

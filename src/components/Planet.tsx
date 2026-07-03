@@ -4,6 +4,7 @@ import {
   BackSide,
   BufferGeometry,
   Color,
+  DoubleSide,
   Float32BufferAttribute,
   ShaderMaterial,
   Vector3,
@@ -49,6 +50,39 @@ const ATMO_FRAGMENT = /* glsl */ `
   void main() {
     float rim = pow(1.0 - abs(dot(normalize(vNormal), normalize(vViewDir))), 2.8);
     gl_FragColor = vec4(uColor, rim * uStrength);
+  }
+`
+
+/* Planetary ring: banded annulus with a Cassini-style gap, seeded per repo. */
+const RING_VERTEX = /* glsl */ `
+  varying vec2 vLocal;
+  void main() {
+    vLocal = position.xy;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`
+const RING_FRAGMENT = /* glsl */ `
+  uniform vec3 uColor;
+  uniform float uInner;
+  uniform float uOuter;
+  uniform float uSeed;
+  varying vec2 vLocal;
+  void main() {
+    float r = length(vLocal);
+    float t = (r - uInner) / (uOuter - uInner);
+    if (t < 0.0 || t > 1.0) discard;
+    // Layered radial banding, phase-shifted by the repo seed.
+    float bands = 0.55
+      + 0.25 * sin(t * 40.0 + uSeed * 17.0)
+      + 0.20 * sin(t * 87.0 + uSeed * 5.0);
+    bands = clamp(bands, 0.15, 1.0);
+    // One clean division gap partway out.
+    float gapPos = 0.55 + fract(uSeed * 3.7) * 0.2;
+    float gap = 0.15 + 0.85 * smoothstep(0.015, 0.05, abs(t - gapPos));
+    // Feathered inner/outer edges.
+    float edge = smoothstep(0.0, 0.12, t) * (1.0 - smoothstep(0.8, 1.0, t));
+    float alpha = bands * gap * edge * 0.55;
+    gl_FragColor = vec4(uColor * (0.55 + 0.45 * bands), alpha);
   }
 `
 
@@ -113,6 +147,25 @@ export function Planet({ spec }: { spec: PlanetSpec }) {
       }),
     [biome.glow, spec.active],
   )
+  const ringMaterial = useMemo(() => {
+    if (!spec.ring) return null
+    // Pale icy dust, faintly tinted toward the biome glow.
+    const color = new Color('#cdd6e4').lerp(new Color(biome.glow), 0.3)
+    return new ShaderMaterial({
+      uniforms: {
+        uColor: { value: color },
+        uInner: { value: spec.ring.inner * spec.size },
+        uOuter: { value: spec.ring.outer * spec.size },
+        uSeed: { value: spec.seed },
+      },
+      vertexShader: RING_VERTEX,
+      fragmentShader: RING_FRAGMENT,
+      transparent: true,
+      depthWrite: false,
+      side: DoubleSide,
+    })
+  }, [spec, biome.glow])
+
   const trail = useMemo(() => {
     const positions = new Float32Array(TRAIL_POINTS * 3)
     const fades = new Float32Array(TRAIL_POINTS)
@@ -135,10 +188,11 @@ export function Planet({ spec }: { spec: PlanetSpec }) {
     () => () => {
       surface.dispose()
       atmosphere.dispose()
+      ringMaterial?.dispose()
       trail.geometry.dispose()
       trail.material.dispose()
     },
-    [surface, atmosphere, trail],
+    [surface, atmosphere, ringMaterial, trail],
   )
 
   useEffect(() => {
@@ -216,6 +270,19 @@ export function Planet({ spec }: { spec: PlanetSpec }) {
         <mesh material={atmosphere} scale={1.13} raycast={() => null}>
           <sphereGeometry args={[spec.size, 32, 24]} />
         </mesh>
+
+        {/* Planetary ring (most-starred repo wears one). */}
+        {spec.ring && ringMaterial && (
+          <mesh
+            material={ringMaterial}
+            rotation={[-Math.PI / 2 + spec.ring.tilt, 0, spec.seed]}
+            raycast={() => null}
+          >
+            <ringGeometry
+              args={[spec.ring.inner * spec.size, spec.ring.outer * spec.size, 96]}
+            />
+          </mesh>
+        )}
 
         {/* Additive halo for recently-active repos. */}
         {spec.active && (
