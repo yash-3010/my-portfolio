@@ -23,12 +23,15 @@ interface GalaxyStore {
   revealed: boolean
   /** Intro camera dolly has finished. */
   introDone: boolean
+  /** Photographic skybox loaded — procedural ambient stars stand down. */
+  skyPhoto: boolean
   setFocus: (focus: FocusTarget) => void
   clearFocus: () => void
   setHovered: (name: string | null) => void
   setReady: () => void
   setRevealed: () => void
   setIntroDone: () => void
+  setSkyPhoto: () => void
 }
 
 export const useGalaxyStore = create<GalaxyStore>((set, get) => ({
@@ -37,6 +40,7 @@ export const useGalaxyStore = create<GalaxyStore>((set, get) => ({
   ready: false,
   revealed: false,
   introDone: false,
+  skyPhoto: false,
   // Ignore focus requests until the intro flight lands — otherwise a click
   // during the establishing dolly opens a card the camera can't frame yet.
   setFocus: (focus) => {
@@ -48,6 +52,7 @@ export const useGalaxyStore = create<GalaxyStore>((set, get) => ({
   setReady: () => set({ ready: true }),
   setRevealed: () => set({ revealed: true }),
   setIntroDone: () => set({ introDone: true }),
+  setSkyPhoto: () => set({ skyPhoto: true }),
 }))
 
 /* ---------------------------------------------------------------- */

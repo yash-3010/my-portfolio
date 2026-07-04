@@ -8,6 +8,7 @@ import {
   ShaderMaterial,
 } from 'three'
 import type { ContributionDay } from '../types'
+import { useGalaxyStore } from '../state/store'
 
 /**
  * Background starfield: one THREE.Points holding two populations.
@@ -84,9 +85,13 @@ function weekdayOf(date: string, fallback: number): number {
   return new Date(ms).getUTCDay()
 }
 
-function buildBuffers(contributions: ContributionDay[], radius: number): StarBuffers {
+function buildBuffers(
+  contributions: ContributionDay[],
+  radius: number,
+  ambientCount: number,
+): StarBuffers {
   const bandCount = contributions.length
-  const total = bandCount + AMBIENT_COUNT
+  const total = bandCount + ambientCount
 
   const positions = new Float32Array(total * 3)
   const colors = new Float32Array(total * 3)
@@ -136,7 +141,7 @@ function buildBuffers(contributions: ContributionDay[], radius: number): StarBuf
   const white = new Color('#f2f6ff')
   const warm = new Color('#ffd9a8')
 
-  for (let j = 0; j < AMBIENT_COUNT; j++) {
+  for (let j = 0; j < ambientCount; j++) {
     const k = bandCount + j
     const rnd = mulberry32(AMBIENT_SEED + j)
 
@@ -178,15 +183,23 @@ export function Starfield({
   contributions: ContributionDay[]
   radius: number
 }) {
+  // When the photographic panorama is up, its real star grain replaces the
+  // procedural ambient shell — only the contribution band (the data) remains.
+  const skyPhoto = useGalaxyStore((s) => s.skyPhoto)
+
   const geometry = useMemo(() => {
-    const { positions, colors, sizes, twinkles } = buildBuffers(contributions, radius)
+    const { positions, colors, sizes, twinkles } = buildBuffers(
+      contributions,
+      radius,
+      skyPhoto ? 0 : AMBIENT_COUNT,
+    )
     const geo = new BufferGeometry()
     geo.setAttribute('position', new Float32BufferAttribute(positions, 3))
     geo.setAttribute('aColor', new Float32BufferAttribute(colors, 3))
     geo.setAttribute('aSize', new Float32BufferAttribute(sizes, 1))
     geo.setAttribute('aTwinkle', new Float32BufferAttribute(twinkles, 1))
     return geo
-  }, [contributions, radius])
+  }, [contributions, radius, skyPhoto])
 
   const material = useMemo(
     () =>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { BackSide, SRGBColorSpace, TextureLoader } from 'three'
 import type { Texture } from 'three'
+import { useGalaxyStore } from '../state/store'
 
 /**
  * Optional photographic sky: an equirectangular Milky Way panorama (e.g. ESO's
@@ -35,6 +36,8 @@ export function Skybox({ radius }: { radius: number }) {
           tex.colorSpace = SRGBColorSpace
           loaded = tex
           setTexture(tex)
+          // Tell the procedural sky to retire its ambient star shell.
+          useGalaxyStore.getState().setSkyPhoto()
         },
         undefined,
         () => tryLoad(i + 1), // fall through to the next format / no skybox
