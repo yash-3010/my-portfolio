@@ -73,9 +73,9 @@ export const MOON_TEXTURES = [
   '2k_eris_fictional.jpg',
   '2k_haumea_fictional.jpg',
 ]
-/** Dwarf-planet imagery for the unclickable filler worlds (makemake is
-    office-to-pdf's body now, so dwarfs stick to ceres/haumea). */
-export const DWARF_TEXTURES = ['2k_ceres_fictional.jpg', '2k_haumea_fictional.jpg']
+/** Dwarf-planet imagery for the unclickable filler worlds (ceres is
+    office-to-pdf's body now, so dwarfs stick to makemake/haumea). */
+export const DWARF_TEXTURES = ['2k_makemake_fictional.jpg', '2k_haumea_fictional.jpg']
 
 export function planetTextureUrl(file: string): string {
   return `${import.meta.env.BASE_URL}assets/planets/${file}`

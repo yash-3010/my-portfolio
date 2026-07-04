@@ -33,7 +33,7 @@
     "createdAt": "2025-02-01T00:00:00Z",
     "readmeSummary": "Dockerized conversion service (Ubuntu + LibreOffice) with an authenticated /convert endpoint for Word/Excel to PDF and a /compare endpoint for side-by-side or overlay PDF diffs, deployed on AWS ECS via ECR.",
     "pinSlotAU": 3.4,
-    "pinTexture": "2k_makemake_fictional.jpg"
+    "pinTexture": "2k_ceres_fictional.jpg"
   },
   {
     "name": "psmf-manager-website",
