@@ -14,15 +14,7 @@ hand-placed — it is all derived from live GitHub data:
 | Moons | Stars and forks |
 | Planet surface | Procedural terra / gas-giant / ice shader seeded per repo — repo age weathers the surface, open issues brew a storm vortex, and active repos light up with night-side city lights |
 | Constellations | Repos clustered by interest: **Web**, **AI / ML**, **Dev Tools** |
-| Starfield band | My last 365 days of contributions — brighter stars = more commits that day |
-| Asteroid belt | One rock per commit, ringing the mid-system |
-| The comet | My longest consecutive-day commit streak, on an eccentric orbit with an anti-sunward tail |
 | Planetary ring | The most-starred repo wears a banded ring |
-| Green zone | A soft habitable-zone annulus spanning the orbits pushed in the last 60 days |
-
-The system is a hierarchical triple star: a small amber companion (star B)
-whirls tightly around the sun, and a coral dwarf (star C) circles the whole
-system far beyond the planets — zoom out to find it.
 
 ### Photographic sky
 

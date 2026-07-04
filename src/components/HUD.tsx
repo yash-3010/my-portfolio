@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useGalaxyStore } from '../state/store'
 import type { GalaxyData } from '../types'
-import { longestStreak, totalCommits, type GalaxyLayout } from '../lib/galaxy'
+import type { GalaxyLayout } from '../lib/galaxy'
 import type { Biome } from '../lib/palette'
 
 /**
@@ -33,14 +33,7 @@ export function HUD({ data, layout }: { data: GalaxyData; layout: GalaxyLayout }
 
   const tagline = data.user.bio ? truncate(data.user.bio, TAGLINE_MAX) : null
 
-  const commitTotal = useMemo(() => totalCommits(layout), [layout])
-  const streak = useMemo(() => longestStreak(data.contributions), [data])
-  const moonCount = useMemo(
-    () => layout.planets.reduce((sum, p) => sum + p.moons.length, 0),
-    [layout],
-  )
   const hasRing = useMemo(() => layout.planets.some((p) => p.ring), [layout])
-  const hasActive = useMemo(() => layout.planets.some((p) => p.active), [layout])
 
   const biomes = useMemo(() => {
     const seen = new Map<string, Biome>()
@@ -78,10 +71,6 @@ export function HUD({ data, layout }: { data: GalaxyData; layout: GalaxyLayout }
         <h1 className="hud__name">{data.user.name.toUpperCase()}</h1>
         <p className="hud__sub">The Living Repo Galaxy</p>
         {tagline && <p className="hud__tagline">{tagline}</p>}
-        <p className="hud__telemetry">
-          3 stars · {layout.planets.length} planets · {moonCount} moons · belt
-          {streak > 0 && ' · comet'}
-        </p>
       </motion.div>
 
       {/* Top-right legend */}
@@ -114,18 +103,8 @@ export function HUD({ data, layout }: { data: GalaxyData; layout: GalaxyLayout }
         ))}
         <p className="legend__caption">
           planet size = commits · orbit = recency · moons = stars &amp; forks
+          {hasRing && ' · ring = most-starred repo'}
         </p>
-        <p className="legend__caption">
-          asteroid belt = {commitTotal.toLocaleString()} commits
-          {streak > 0 && ` · comet = ${streak}-day streak`}
-        </p>
-        {(hasActive || hasRing) && (
-          <p className="legend__caption">
-            {hasActive && 'green zone = pushed < 60 days'}
-            {hasActive && hasRing && ' · '}
-            {hasRing && 'ring = most-starred repo'}
-          </p>
-        )}
       </motion.aside>
 
       {/* Bottom-center control hint — shown until the first focus ever */}

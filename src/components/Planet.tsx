@@ -2,14 +2,12 @@ import { useEffect, useMemo, useRef } from 'react'
 import {
   AdditiveBlending,
   BackSide,
-  BufferGeometry,
   Color,
   DoubleSide,
-  Float32BufferAttribute,
   ShaderMaterial,
   Vector3,
 } from 'three'
-import type { Group, Mesh, Points } from 'three'
+import type { Group, Mesh } from 'three'
 import { useFrame } from '@react-three/fiber'
 import type { ThreeEvent } from '@react-three/fiber'
 import { Html, useCursor } from '@react-three/drei'
@@ -22,14 +20,10 @@ import { getGlowTexture } from './Sun'
 const STAR_MOON_COLOR = '#ffe9b8'
 const FORK_MOON_COLOR = '#9aa3b2'
 const DRAG_THRESHOLD_PX = 8
-const TRAIL_POINTS = 26
-/** Radians of orbit the fading motion trail spans behind the planet. */
-const TRAIL_ARC = 0.42
 
 /** Module-level scratch vectors — never allocated in the frame loop. */
 const tmpPlanet = new Vector3()
 const tmpMoon = new Vector3()
-const tmpTrail = new Vector3()
 
 /* Fresnel atmosphere shell (shared shader, tinted per planet). */
 const ATMO_VERTEX = /* glsl */ `
@@ -86,34 +80,12 @@ const RING_FRAGMENT = /* glsl */ `
   }
 `
 
-const TRAIL_VERTEX = /* glsl */ `
-  attribute float aFade;
-  varying float vFade;
-  void main() {
-    vFade = aFade;
-    vec4 mv = modelViewMatrix * vec4(position, 1.0);
-    gl_PointSize = clamp((1.0 + aFade * 2.6) * (160.0 / -mv.z), 1.0, 7.0);
-    gl_Position = projectionMatrix * mv;
-  }
-`
-const TRAIL_FRAGMENT = /* glsl */ `
-  uniform vec3 uColor;
-  varying float vFade;
-  void main() {
-    float d = length(gl_PointCoord - vec2(0.5));
-    float alpha = (1.0 - smoothstep(0.1, 0.5, d)) * vFade * 0.4;
-    if (alpha <= 0.004) discard;
-    gl_FragColor = vec4(uColor * alpha, alpha);
-  }
-`
-
 export function Planet({ spec }: { spec: PlanetSpec }) {
   const name = spec.repo.name
   const biome = spec.biome
   const groupRef = useRef<Group>(null)
   const bodyRef = useRef<Mesh>(null)
   const moonRefs = useRef<(Mesh | null)[]>([])
-  const trailRef = useRef<Points>(null)
 
   // Persistent world-position vector shared with the camera rig via the store map.
   const worldPosRef = useRef<Vector3 | null>(null)
@@ -166,33 +138,13 @@ export function Planet({ spec }: { spec: PlanetSpec }) {
     })
   }, [spec, biome.glow])
 
-  const trail = useMemo(() => {
-    const positions = new Float32Array(TRAIL_POINTS * 3)
-    const fades = new Float32Array(TRAIL_POINTS)
-    for (let i = 0; i < TRAIL_POINTS; i++) fades[i] = i / (TRAIL_POINTS - 1)
-    const geometry = new BufferGeometry()
-    geometry.setAttribute('position', new Float32BufferAttribute(positions, 3))
-    geometry.setAttribute('aFade', new Float32BufferAttribute(fades, 1))
-    const material = new ShaderMaterial({
-      uniforms: { uColor: { value: new Color(biome.glow) } },
-      vertexShader: TRAIL_VERTEX,
-      fragmentShader: TRAIL_FRAGMENT,
-      blending: AdditiveBlending,
-      transparent: true,
-      depthWrite: false,
-    })
-    return { geometry, material }
-  }, [biome.glow])
-
   useEffect(
     () => () => {
       surface.dispose()
       atmosphere.dispose()
       ringMaterial?.dispose()
-      trail.geometry.dispose()
-      trail.material.dispose()
     },
-    [surface, atmosphere, ringMaterial, trail],
+    [surface, atmosphere, ringMaterial],
   )
 
   useEffect(() => {
@@ -226,20 +178,6 @@ export function Planet({ spec }: { spec: PlanetSpec }) {
       moonPositionAt(moon, et, tmpMoon)
       mesh.position.copy(tmpMoon)
     }
-
-    // Fading motion trail: sample the orbit path behind the current angle.
-    // (World-space points, so the geometry lives outside the moving group.)
-    const trailPts = trailRef.current
-    if (trailPts) {
-      const pos = trailPts.geometry.attributes.position
-      const tNow = galaxyClock.t
-      for (let i = 0; i < TRAIL_POINTS; i++) {
-        const back = (1 - i / (TRAIL_POINTS - 1)) * (TRAIL_ARC / spec.speed)
-        planetPositionAt(spec, tNow - back, tmpTrail)
-        pos.setXYZ(i, tmpTrail.x, tmpTrail.y, tmpTrail.z)
-      }
-      pos.needsUpdate = true
-    }
   })
 
   const handleClick = (e: ThreeEvent<MouseEvent>) => {
@@ -251,15 +189,6 @@ export function Planet({ spec }: { spec: PlanetSpec }) {
 
   return (
     <>
-      {/* Motion trail lives in world space. */}
-      <points
-        ref={trailRef}
-        geometry={trail.geometry}
-        material={trail.material}
-        frustumCulled={false}
-        raycast={() => null}
-      />
-
       <group ref={groupRef} name={`planet-${name}`}>
         {/* The planet: custom-lit procedural surface. */}
         <mesh ref={bodyRef} material={surface}>

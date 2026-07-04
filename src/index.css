@@ -279,14 +279,6 @@ button {
   color: #8b93b8;
 }
 
-.hud__telemetry {
-  margin: 9px 0 0;
-  font-family: ui-monospace, 'SF Mono', 'SFMono-Regular', Menlo, Consolas, monospace;
-  font-size: 10.5px;
-  letter-spacing: 0.04em;
-  color: #59617a;
-}
-
 /* legend — top right */
 .hud__legend {
   position: absolute;

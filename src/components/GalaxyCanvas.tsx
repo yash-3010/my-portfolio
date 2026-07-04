@@ -1,19 +1,13 @@
-import { Suspense, useEffect, useMemo, useRef } from 'react'
+import { Suspense, useEffect, useRef } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { Bloom, EffectComposer, Vignette } from '@react-three/postprocessing'
 import type { GalaxyData } from '../types'
-import { longestStreak, type GalaxyLayout } from '../lib/galaxy'
+import type { GalaxyLayout } from '../lib/galaxy'
 import { galaxyClock, useGalaxyStore } from '../state/store'
-import { Starfield } from './Starfield'
 import { Skybox } from './Skybox'
 import { Sun } from './Sun'
-import { CompanionStars } from './CompanionStars'
-import { ActiveZone } from './ActiveZone'
 import { Planet } from './Planet'
 import { Orbits } from './Orbits'
-import { AsteroidBelt } from './AsteroidBelt'
-import { Comet } from './Comet'
-import { WarpStreaks } from './WarpStreaks'
 import { CameraRig } from './CameraRig'
 
 /**
@@ -31,7 +25,6 @@ function ClockTicker() {
 
 export function GalaxyCanvas({ data, layout }: { data: GalaxyData; layout: GalaxyLayout }) {
   const maxR = layout.maxOrbitRadius
-  const streak = useMemo(() => longestStreak(data.contributions), [data])
   const pointerDown = useRef({ x: 0, y: 0 })
 
   useEffect(() => {
@@ -50,9 +43,8 @@ export function GalaxyCanvas({ data, layout }: { data: GalaxyData; layout: Galax
         camera={{
           fov: 50,
           near: 0.5,
-          // Must cover the skybox's far side from the warp start pose
-          // (~5.4·maxR from origin) and from controls.maxDistance (3.6·maxR):
-          // worst case ≈ 5.4·maxR + 6·maxR. Per-primitive far-plane clipping
+          // Must cover the skybox's far side from controls.maxDistance
+          // (3.6·maxR + 6·maxR ≈ 9.6·maxR). Per-primitive far-plane clipping
           // ignores frustumCulled={false}, so this can't be undersized.
           far: Math.max(300, maxR * 12),
           position: [0, maxR * 2.6, maxR * 3.4],
@@ -75,23 +67,17 @@ export function GalaxyCanvas({ data, layout }: { data: GalaxyData; layout: Galax
         <ambientLight intensity={0.22} />
         <ClockTicker />
         <Suspense fallback={null}>
-          {/* Beyond the warp start pose (~5.4·maxR) so the camera never
-              leaves the sphere; camera far covers its whole back side. */}
+          {/* Beyond controls.maxDistance (3.6·maxR) so the camera always
+              stays inside the sphere. */}
           <Skybox radius={maxR * 6} />
-          <Starfield contributions={data.contributions} radius={maxR * 2.4} />
           <Sun user={data.user} />
-          <CompanionStars maxR={maxR} />
-          <ActiveZone layout={layout} />
           {layout.planets.map((spec) => (
             <Planet key={spec.repo.name} spec={spec} />
           ))}
           <Orbits planets={layout.planets} />
-          <AsteroidBelt layout={layout} />
-          {streak > 0 && <Comet maxR={maxR} streak={streak} />}
-          <WarpStreaks maxR={maxR} />
           <CameraRig layout={layout} />
           {/* Selective bloom unifies every glow source (sun, halos, active
-              planets, starfield) into one consistent light bleed. */}
+              planets) into one consistent light bleed. */}
           <EffectComposer multisampling={0}>
             <Bloom
               mipmapBlur

@@ -9,7 +9,7 @@ import {
 import type { Mesh, SpriteMaterial } from 'three'
 import { useFrame } from '@react-three/fiber'
 import type { ThreeEvent } from '@react-three/fiber'
-import { Sparkles, useCursor } from '@react-three/drei'
+import { useCursor } from '@react-three/drei'
 import type { GalaxyUser } from '../types'
 import { SUN } from '../lib/palette'
 import { SUN_RADIUS } from '../lib/galaxy'
@@ -156,15 +156,6 @@ export function Sun({ user }: { user: GalaxyUser }) {
           blending={AdditiveBlending}
         />
       </sprite>
-
-      <Sparkles
-        count={36}
-        scale={7.5}
-        size={3}
-        speed={0.35}
-        color={SUN.core}
-        opacity={0.7}
-      />
     </group>
   )
 }
