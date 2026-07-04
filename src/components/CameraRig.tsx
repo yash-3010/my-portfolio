@@ -25,6 +25,35 @@ const WORLD_UP = new Vector3(0, 1, 0)
 /** Upward bias blended into the approach direction (keeps a pleasant oblique). */
 const APPROACH_LIFT = 0.35
 
+/* ------------------------------------------------------------------ */
+/* Overview pose — THE establishing shot. Tune these three numbers:    */
+/*   AZIMUTH   spins the camera around the system (radians, 0 = +Z);  */
+/*             this decides which part of the Milky Way sits behind.  */
+/*   ELEVATION camera height, as a fraction of the frame radius.      */
+/*   DISTANCE  horizontal pull-back, as a fraction of the frame radius.*/
+/* ------------------------------------------------------------------ */
+const OVERVIEW_AZIMUTH = 3.4
+const OVERVIEW_ELEVATION = 0.15
+const OVERVIEW_DISTANCE = 0.6
+
+function overviewEye(frameR: number): Vector3 {
+  return tmpEye.set(
+    Math.sin(OVERVIEW_AZIMUTH) * frameR * OVERVIEW_DISTANCE,
+    frameR * OVERVIEW_ELEVATION,
+    Math.cos(OVERVIEW_AZIMUTH) * frameR * OVERVIEW_DISTANCE,
+  )
+}
+
+/** Where the camera waits before the intro dolly — same azimuth as the
+    overview pose, pulled way back, so the flight is a clean descent. */
+export function introStartPosition(frameR: number): [number, number, number] {
+  return [
+    Math.sin(OVERVIEW_AZIMUTH) * frameR * 1.7,
+    frameR * 1.3,
+    Math.cos(OVERVIEW_AZIMUTH) * frameR * 1.7,
+  ]
+}
+
 function isNarrowViewport(): boolean {
   return window.matchMedia('(max-width: 720px)').matches
 }
@@ -104,13 +133,14 @@ export function CameraRig({ layout }: { layout: GalaxyLayout }) {
     const controls = controlsRef.current
     if (!controls) return
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const eye = overviewEye(frameR)
     if (reduceMotion) {
-      void controls.setLookAt(0, frameR * 0.4, frameR * 0.72, 0, 0, 0, false)
+      void controls.setLookAt(eye.x, eye.y, eye.z, 0, 0, 0, false)
       useGalaxyStore.getState().setIntroDone()
       return
     }
     controls.enabled = false
-    void controls.setLookAt(0, frameR * 0.4, frameR * 0.72, 0, 0, 0, true).then(() => {
+    void controls.setLookAt(eye.x, eye.y, eye.z, 0, 0, 0, true).then(() => {
       controls.enabled = true
       useGalaxyStore.getState().setIntroDone()
     })
@@ -129,7 +159,8 @@ export function CameraRig({ layout }: { layout: GalaxyLayout }) {
 
     if (focus === null) {
       // Return to the overview pose.
-      flight = controls.setLookAt(0, frameR * 0.4, frameR * 0.72, 0, 0, 0, true)
+      const eye = overviewEye(frameR)
+      flight = controls.setLookAt(eye.x, eye.y, eye.z, 0, 0, 0, true)
     } else if (focus.kind === 'sun') {
       const star = STARS.find((s) => s.id === focus.star)
       if (star && star.id === 'C') {
