@@ -40,6 +40,7 @@ export function HUD({ data, layout }: { data: GalaxyData; layout: GalaxyLayout }
     [layout],
   )
   const hasRing = useMemo(() => layout.planets.some((p) => p.ring), [layout])
+  const hasActive = useMemo(() => layout.planets.some((p) => p.active), [layout])
 
   const biomes = useMemo(() => {
     const seen = new Map<string, Biome>()
@@ -118,9 +119,13 @@ export function HUD({ data, layout }: { data: GalaxyData; layout: GalaxyLayout }
           asteroid belt = {commitTotal.toLocaleString()} commits
           {streak > 0 && ` · comet = ${streak}-day streak`}
         </p>
-        <p className="legend__caption">
-          green zone = pushed &lt; 60 days{hasRing && ' · ring = most-starred repo'}
-        </p>
+        {(hasActive || hasRing) && (
+          <p className="legend__caption">
+            {hasActive && 'green zone = pushed < 60 days'}
+            {hasActive && hasRing && ' · '}
+            {hasRing && 'ring = most-starred repo'}
+          </p>
+        )}
       </motion.aside>
 
       {/* Bottom-center control hint — shown until the first focus ever */}

@@ -5,7 +5,6 @@ import type { GalaxyData } from '../types'
 import { longestStreak, type GalaxyLayout } from '../lib/galaxy'
 import { galaxyClock, useGalaxyStore } from '../state/store'
 import { Starfield } from './Starfield'
-import { DeepSpace } from './DeepSpace'
 import { Skybox } from './Skybox'
 import { Sun } from './Sun'
 import { CompanionStars } from './CompanionStars'
@@ -51,9 +50,11 @@ export function GalaxyCanvas({ data, layout }: { data: GalaxyData; layout: Galax
         camera={{
           fov: 50,
           near: 0.5,
-          // Everything else (fog, controls.maxDistance, starfield) scales with
-          // the layout, so the frustum must too.
-          far: Math.max(300, maxR * 6),
+          // Must cover the skybox's far side from the warp start pose
+          // (~5.4·maxR from origin) and from controls.maxDistance (3.6·maxR):
+          // worst case ≈ 5.4·maxR + 6·maxR. Per-primitive far-plane clipping
+          // ignores frustumCulled={false}, so this can't be undersized.
+          far: Math.max(300, maxR * 12),
           position: [0, maxR * 2.6, maxR * 3.4],
         }}
         gl={{ antialias: true, powerPreference: 'high-performance' }}
@@ -74,8 +75,9 @@ export function GalaxyCanvas({ data, layout }: { data: GalaxyData; layout: Galax
         <ambientLight intensity={0.22} />
         <ClockTicker />
         <Suspense fallback={null}>
-          <Skybox radius={maxR * 4.8} />
-          <DeepSpace radius={maxR} />
+          {/* Beyond the warp start pose (~5.4·maxR) so the camera never
+              leaves the sphere; camera far covers its whole back side. */}
+          <Skybox radius={maxR * 6} />
           <Starfield contributions={data.contributions} radius={maxR * 2.4} />
           <Sun user={data.user} />
           <CompanionStars maxR={maxR} />
