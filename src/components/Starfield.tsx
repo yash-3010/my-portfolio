@@ -8,20 +8,16 @@ import {
   ShaderMaterial,
 } from 'three'
 import type { ContributionDay } from '../types'
-import { useGalaxyStore } from '../state/store'
 
 /**
- * Background starfield: one THREE.Points holding two populations.
- *  1. The contribution band — the last 365 days wrapped 360° around the
- *     scene as a milky-way-like ring at ~`radius`.
- *  2. An ambient shell of ~1400 faint stars surrounding everything.
- * Fully deterministic (seeded PRNG), twinkles on wall-clock time so the
- * sky stays alive even when the galaxy clock is frozen.
+ * The contribution band: the last 365 days wrapped 360° around the scene as
+ * a milky-way-like ring at ~`radius`. The rest of the sky is the photographic
+ * panorama (Skybox) — no procedural filler stars. Fully deterministic (seeded
+ * PRNG), twinkles on wall-clock time so the sky stays alive even when the
+ * galaxy clock is frozen.
  */
 
-const AMBIENT_COUNT = 1400
 const BAND_SEED = 0x5eedf00d
-const AMBIENT_SEED = 0x51a2b3c4
 
 /** Contribution stars encode a "strong twinkle" flag by offsetting phase +10. */
 const TWINKLE_FLAG = 10.0
@@ -85,18 +81,13 @@ function weekdayOf(date: string, fallback: number): number {
   return new Date(ms).getUTCDay()
 }
 
-function buildBuffers(
-  contributions: ContributionDay[],
-  radius: number,
-  ambientCount: number,
-): StarBuffers {
+function buildBuffers(contributions: ContributionDay[], radius: number): StarBuffers {
   const bandCount = contributions.length
-  const total = bandCount + ambientCount
 
-  const positions = new Float32Array(total * 3)
-  const colors = new Float32Array(total * 3)
-  const sizes = new Float32Array(total)
-  const twinkles = new Float32Array(total)
+  const positions = new Float32Array(bandCount * 3)
+  const colors = new Float32Array(bandCount * 3)
+  const sizes = new Float32Array(bandCount)
+  const twinkles = new Float32Array(bandCount)
 
   const color = new Color()
   const dim = new Color('#26304d')
@@ -136,40 +127,6 @@ function buildBuffers(
     twinkles[i] = rnd() * Math.PI * 2 + TWINKLE_FLAG
   }
 
-  // --- Ambient shell ------------------------------------------------------
-  const cool = new Color('#c7d6ff')
-  const white = new Color('#f2f6ff')
-  const warm = new Color('#ffd9a8')
-
-  for (let j = 0; j < ambientCount; j++) {
-    const k = bandCount + j
-    const rnd = mulberry32(AMBIENT_SEED + j)
-
-    // Uniform direction on the sphere.
-    const z = rnd() * 2 - 1
-    const theta = rnd() * Math.PI * 2
-    const sxy = Math.sqrt(Math.max(0, 1 - z * z))
-    const r = radius * (0.8 + rnd() * 0.55)
-
-    positions[k * 3] = Math.cos(theta) * sxy * r
-    positions[k * 3 + 1] = z * r
-    positions[k * 3 + 2] = Math.sin(theta) * sxy * r
-
-    // Faint white-blue with slight temperature variation; a few warm ones.
-    if (rnd() < 0.06) {
-      color.copy(warm)
-    } else {
-      color.copy(cool).lerp(white, rnd())
-    }
-    // Kept dimmer than the contribution band so the band reads as the feature.
-    const brightness = 0.28 + rnd() * 0.4
-    colors[k * 3] = color.r * brightness
-    colors[k * 3 + 1] = color.g * brightness
-    colors[k * 3 + 2] = color.b * brightness
-    sizes[k] = 0.5 + rnd() * 1.1
-    twinkles[k] = rnd() * Math.PI * 2
-  }
-
   return { positions, colors, sizes, twinkles }
 }
 
@@ -183,23 +140,15 @@ export function Starfield({
   contributions: ContributionDay[]
   radius: number
 }) {
-  // When the photographic panorama is up, its real star grain replaces the
-  // procedural ambient shell — only the contribution band (the data) remains.
-  const skyPhoto = useGalaxyStore((s) => s.skyPhoto)
-
   const geometry = useMemo(() => {
-    const { positions, colors, sizes, twinkles } = buildBuffers(
-      contributions,
-      radius,
-      skyPhoto ? 0 : AMBIENT_COUNT,
-    )
+    const { positions, colors, sizes, twinkles } = buildBuffers(contributions, radius)
     const geo = new BufferGeometry()
     geo.setAttribute('position', new Float32BufferAttribute(positions, 3))
     geo.setAttribute('aColor', new Float32BufferAttribute(colors, 3))
     geo.setAttribute('aSize', new Float32BufferAttribute(sizes, 1))
     geo.setAttribute('aTwinkle', new Float32BufferAttribute(twinkles, 1))
     return geo
-  }, [contributions, radius, skyPhoto])
+  }, [contributions, radius])
 
   const material = useMemo(
     () =>
