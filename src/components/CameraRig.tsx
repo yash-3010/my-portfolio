@@ -33,8 +33,8 @@ const APPROACH_LIFT = 0.35
 /*   DISTANCE  horizontal pull-back, as a fraction of the frame radius.*/
 /* ------------------------------------------------------------------ */
 const OVERVIEW_AZIMUTH = 3.4
-const OVERVIEW_ELEVATION = 0.15
-const OVERVIEW_DISTANCE = 0.6
+const OVERVIEW_ELEVATION = 0.08
+const OVERVIEW_DISTANCE = 0.34
 
 function overviewEye(frameR: number): Vector3 {
   return tmpEye.set(
