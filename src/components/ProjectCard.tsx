@@ -113,9 +113,12 @@ function PlanetBody({ spec, onClose }: { spec: PlanetSpec; onClose: () => void }
         </div>
       )}
       <div className="card__actions">
-        <a className="btn" href={repo.url} target="_blank" rel="noreferrer">
-          View on GitHub
-        </a>
+        {/* Manual entries (private/work repos) have no public URL. */}
+        {repo.url && (
+          <a className="btn" href={repo.url} target="_blank" rel="noreferrer">
+            View on GitHub
+          </a>
+        )}
         {repo.homepage && (
           <a className="btn btn--ghost" href={normalizeUrl(repo.homepage)} target="_blank" rel="noreferrer">
             Live demo ↗

@@ -1,146 +1,334 @@
 {
   "user": {
     "login": "yash-3010",
-    "name": "Yash",
-    "avatarUrl": "https://avatars.githubusercontent.com/yash-3010",
-    "bio": "Full-stack engineer — TypeScript & Python. Building for the web, exploring AI/ML, and making dev tools that stay out of your way.",
+    "name": "Yash Barman",
+    "avatarUrl": "https://avatars.githubusercontent.com/u/138135174?v=4",
+    "bio": "Software Engineer ",
     "profileUrl": "https://github.com/yash-3010",
-    "followers": 12,
-    "publicRepos": 6
+    "followers": 1,
+    "publicRepos": 18
   },
   "repos": [
     {
-      "name": "pvcon-website",
-      "description": "Company website for PVCON — marketing site with a custom CMS-lite content pipeline.",
-      "url": "https://github.com/yash-3010/pvcon-website",
-      "homepage": "https://pvcon.in",
-      "language": "TypeScript",
-      "languages": [
-        "TypeScript",
-        "CSS",
-        "HTML"
-      ],
-      "topics": [
-        "website",
-        "react",
-        "business"
-      ],
-      "stars": 2,
-      "forks": 0,
-      "commits": 96,
-      "pushedAt": "2026-06-26T12:00:00.000Z",
-      "createdAt": "2025-05-08T12:00:00.000Z",
-      "readmeSummary": "The production website for PVCON, built with React and TypeScript. Ships a lightweight content pipeline so non-developers can update copy without touching code."
-    },
-    {
       "name": "my-portfolio",
-      "description": "The Living Repo Galaxy — my portfolio as a 3D galaxy generated from live GitHub data.",
+      "description": null,
       "url": "https://github.com/yash-3010/my-portfolio",
       "homepage": null,
       "language": "TypeScript",
       "languages": [
         "TypeScript",
+        "JavaScript",
         "CSS",
         "HTML"
       ],
-      "topics": [
-        "portfolio",
-        "threejs",
-        "react-three-fiber"
-      ],
-      "stars": 1,
+      "topics": [],
+      "stars": 0,
+      "openIssues": 1,
       "forks": 0,
-      "commits": 18,
-      "pushedAt": "2026-07-02T12:00:00.000Z",
-      "createdAt": "2026-06-02T12:00:00.000Z",
-      "readmeSummary": "A procedural 3D galaxy where every repo is a planet: size = commits, biome = language, moons = stars and forks, and the starfield is my contribution graph."
+      "commits": 7,
+      "pushedAt": "2026-07-04T11:53:58Z",
+      "createdAt": "2026-07-02T18:19:58Z",
+      "readmeSummary": "My portfolio as a living 3D galaxy, procedurally generated from my GitHub."
     },
     {
-      "name": "langchain-learn",
-      "description": "Hands-on LangChain experiments: RAG pipelines, agents, and structured output.",
-      "url": "https://github.com/yash-3010/langchain-learn",
-      "homepage": null,
-      "language": "Python",
-      "languages": [
-        "Python",
-        "Jupyter Notebook"
-      ],
-      "topics": [
-        "langchain",
-        "llm",
-        "rag",
-        "ai"
-      ],
-      "stars": 4,
-      "forks": 1,
-      "commits": 42,
-      "pushedAt": "2026-06-20T12:00:00.000Z",
-      "createdAt": "2025-11-04T12:00:00.000Z",
-      "readmeSummary": "A working notebook series exploring LangChain: retrieval-augmented generation, tool-calling agents, and evaluation harnesses for LLM apps."
-    },
-    {
-      "name": "tinypixels",
-      "description": "A tiny in-browser pixel-art editor with palette tools and PNG export.",
-      "url": "https://github.com/yash-3010/tinypixels",
+      "name": "pvcon-holiday-tracker",
+      "description": null,
+      "url": "https://github.com/yash-3010/pvcon-holiday-tracker",
       "homepage": null,
       "language": "TypeScript",
       "languages": [
         "TypeScript",
+        "CSS",
+        "JavaScript"
+      ],
+      "topics": [],
+      "stars": 0,
+      "openIssues": 0,
+      "forks": 0,
+      "commits": 2,
+      "pushedAt": "2026-04-27T04:31:23Z",
+      "createdAt": "2026-04-27T04:29:32Z",
+      "readmeSummary": "Minimal holiday & leave tracker for PVCON Consulting. Replaces the Excel sheet."
+    },
+    {
+      "name": "pvcon-website",
+      "description": null,
+      "url": "https://github.com/yash-3010/pvcon-website",
+      "homepage": "https://pvcon-website.vercel.app",
+      "language": "TypeScript",
+      "languages": [
+        "TypeScript",
+        "JavaScript",
+        "MDX",
         "CSS"
       ],
-      "topics": [
-        "pixel-art",
-        "canvas",
-        "editor"
+      "topics": [],
+      "stars": 0,
+      "openIssues": 0,
+      "forks": 0,
+      "commits": 78,
+      "pushedAt": "2026-04-09T23:07:10Z",
+      "createdAt": "2026-02-27T23:43:58Z",
+      "readmeSummary": null
+    },
+    {
+      "name": "langchain-learn",
+      "description": null,
+      "url": "https://github.com/yash-3010/langchain-learn",
+      "homepage": null,
+      "language": "Python",
+      "languages": [
+        "Python"
       ],
-      "stars": 6,
-      "forks": 2,
-      "commits": 64,
-      "pushedAt": "2026-04-08T12:00:00.000Z",
-      "createdAt": "2025-08-16T12:00:00.000Z",
-      "readmeSummary": "A zero-dependency pixel-art editor that runs entirely in the browser: draw, manage palettes, and export sprites as PNG."
+      "topics": [],
+      "stars": 0,
+      "openIssues": 0,
+      "forks": 0,
+      "commits": 1,
+      "pushedAt": "2026-03-24T15:57:11Z",
+      "createdAt": "2026-03-24T15:55:41Z",
+      "readmeSummary": null
     },
     {
       "name": "my-file-crypto",
-      "description": "CLI tool for encrypting and decrypting files with modern authenticated ciphers.",
+      "description": null,
       "url": "https://github.com/yash-3010/my-file-crypto",
-      "homepage": null,
-      "language": "Python",
+      "homepage": "https://my-file-crypto.vercel.app",
+      "language": "HTML",
       "languages": [
-        "Python"
+        "HTML",
+        "CSS"
       ],
-      "topics": [
-        "cli",
-        "encryption",
-        "security"
+      "topics": [],
+      "stars": 0,
+      "openIssues": 0,
+      "forks": 0,
+      "commits": 8,
+      "pushedAt": "2025-03-10T22:54:20Z",
+      "createdAt": "2025-03-09T19:20:48Z",
+      "readmeSummary": null
+    },
+    {
+      "name": "pvcon-minimal",
+      "description": null,
+      "url": "https://github.com/yash-3010/pvcon-minimal",
+      "homepage": "https://pvcon-minimal.vercel.app",
+      "language": "HTML",
+      "languages": [
+        "HTML",
+        "CSS",
+        "SCSS",
+        "JavaScript"
       ],
-      "stars": 3,
-      "forks": 1,
-      "commits": 38,
-      "pushedAt": "2026-02-02T12:00:00.000Z",
-      "createdAt": "2025-02-17T12:00:00.000Z",
-      "readmeSummary": "A small, auditable command-line utility for file encryption using authenticated encryption, with key derivation from passphrases."
+      "topics": [],
+      "stars": 0,
+      "openIssues": 0,
+      "forks": 0,
+      "commits": 3,
+      "pushedAt": "2025-02-21T08:05:28Z",
+      "createdAt": "2025-02-20T14:36:58Z",
+      "readmeSummary": "Template Name: Furni Template Author: Untree.co Template License: https://creativecommons.org/licenses/by/3.0/ Author URI: https://untree.co/"
+    },
+    {
+      "name": "pvcon-standard",
+      "description": null,
+      "url": "https://github.com/yash-3010/pvcon-standard",
+      "homepage": "https://pvcon-standard.vercel.app",
+      "language": "HTML",
+      "languages": [
+        "HTML",
+        "CSS",
+        "JavaScript",
+        "PHP"
+      ],
+      "topics": [],
+      "stars": 0,
+      "openIssues": 0,
+      "forks": 0,
+      "commits": 1,
+      "pushedAt": "2025-02-20T19:28:22Z",
+      "createdAt": "2025-02-20T19:28:15Z",
+      "readmeSummary": "Template Name: OnePage Template URL: https://bootstrapmade.com/onepage-multipurpose-bootstrap-template/ Author: BootstrapMade.com License: https://bootstrapmade.com/license/"
+    },
+    {
+      "name": "new-yaer-2025",
+      "description": null,
+      "url": "https://github.com/yash-3010/new-yaer-2025",
+      "homepage": "https://new-yaer-2025.vercel.app",
+      "language": "HTML",
+      "languages": [
+        "HTML"
+      ],
+      "topics": [],
+      "stars": 0,
+      "openIssues": 0,
+      "forks": 0,
+      "commits": 2,
+      "pushedAt": "2024-12-23T00:02:30Z",
+      "createdAt": "2024-12-23T00:01:10Z",
+      "readmeSummary": null
+    },
+    {
+      "name": "tinypixels",
+      "description": null,
+      "url": "https://github.com/yash-3010/tinypixels",
+      "homepage": "https://tinypixels.vercel.app",
+      "language": "JavaScript",
+      "languages": [
+        "JavaScript",
+        "HTML",
+        "CSS"
+      ],
+      "topics": [],
+      "stars": 0,
+      "openIssues": 0,
+      "forks": 0,
+      "commits": 1,
+      "pushedAt": "2024-11-12T22:02:20Z",
+      "createdAt": "2024-11-12T22:02:17Z",
+      "readmeSummary": null
     },
     {
       "name": "pdf-modifier",
-      "description": "Merge, split, watermark, and rearrange PDFs from the command line.",
+      "description": null,
       "url": "https://github.com/yash-3010/pdf-modifier",
-      "homepage": null,
-      "language": "Python",
+      "homepage": "https://pdf-modifier.vercel.app",
+      "language": "TypeScript",
       "languages": [
-        "Python"
+        "TypeScript",
+        "JavaScript",
+        "CSS"
       ],
-      "topics": [
-        "pdf",
-        "cli",
-        "tooling"
+      "topics": [],
+      "stars": 0,
+      "openIssues": 0,
+      "forks": 0,
+      "commits": 28,
+      "pushedAt": "2023-11-10T09:53:04Z",
+      "createdAt": "2023-11-08T23:10:03Z",
+      "readmeSummary": "This is the frontend for the pdf modifier app. It is built with Next.js and React."
+    },
+    {
+      "name": "server",
+      "description": null,
+      "url": "https://github.com/yash-3010/server",
+      "homepage": null,
+      "language": "JavaScript",
+      "languages": [
+        "JavaScript"
       ],
-      "stars": 5,
-      "forks": 2,
-      "commits": 27,
-      "pushedAt": "2025-12-14T12:00:00.000Z",
-      "createdAt": "2024-12-19T12:00:00.000Z",
-      "readmeSummary": "A batteries-included PDF toolkit for the terminal: merge, split, rotate, watermark, and reorder pages in one pass."
+      "topics": [],
+      "stars": 0,
+      "openIssues": 0,
+      "forks": 0,
+      "commits": 11,
+      "pushedAt": "2023-11-09T06:31:52Z",
+      "createdAt": "2023-11-08T00:22:05Z",
+      "readmeSummary": "This is a backend server for the Pdf Modifier project. It is written in Node.js and uses the Express framework. Mongoose is used to connect to a MongoDB database. The server is hosted on Heroku. The server is used to store the user's data and to generate the modified pdf. The…"
+    },
+    {
+      "name": "artist_directory",
+      "description": null,
+      "url": "https://github.com/yash-3010/artist_directory",
+      "homepage": null,
+      "language": "HTML",
+      "languages": [
+        "HTML",
+        "Ruby",
+        "CSS",
+        "Batchfile"
+      ],
+      "topics": [],
+      "stars": 0,
+      "openIssues": 0,
+      "forks": 0,
+      "commits": 10,
+      "pushedAt": "2023-10-17T17:37:40Z",
+      "createdAt": "2023-09-11T20:38:04Z",
+      "readmeSummary": "This is a simple artist directory app that allows users to see a list of artists and their image gallery. Users can give reviews to artists and derectly contact them through the app. Users can also search for artists by name, location, and category. Admins can add, edit, and…"
+    },
+    {
+      "name": "yash-kreeti.github.io",
+      "description": null,
+      "url": "https://github.com/yash-3010/yash-kreeti.github.io",
+      "homepage": null,
+      "language": null,
+      "languages": [],
+      "topics": [],
+      "stars": 0,
+      "openIssues": 0,
+      "forks": 0,
+      "commits": 2,
+      "pushedAt": "2023-09-27T18:02:25Z",
+      "createdAt": "2023-09-27T18:02:24Z",
+      "readmeSummary": null
+    },
+    {
+      "name": "circleweb_completed",
+      "description": null,
+      "url": "https://github.com/yash-3010/circleweb_completed",
+      "homepage": "https://circleweb-completed.vercel.app",
+      "language": "HTML",
+      "languages": [
+        "HTML",
+        "CSS"
+      ],
+      "topics": [],
+      "stars": 0,
+      "openIssues": 0,
+      "forks": 0,
+      "commits": 18,
+      "pushedAt": "2023-08-18T15:55:06Z",
+      "createdAt": "2023-07-02T18:05:56Z",
+      "readmeSummary": null
+    },
+    {
+      "name": "Ruby-Assignments",
+      "description": null,
+      "url": "https://github.com/yash-3010/Ruby-Assignments",
+      "homepage": null,
+      "language": null,
+      "languages": [],
+      "topics": [],
+      "stars": 0,
+      "openIssues": 0,
+      "forks": 0,
+      "commits": 1,
+      "pushedAt": "2023-07-19T18:55:58Z",
+      "createdAt": "2023-07-19T18:55:36Z",
+      "readmeSummary": null
+    },
+    {
+      "name": "Javascript-Assignments",
+      "description": null,
+      "url": "https://github.com/yash-3010/Javascript-Assignments",
+      "homepage": null,
+      "language": null,
+      "languages": [],
+      "topics": [],
+      "stars": 0,
+      "openIssues": 0,
+      "forks": 0,
+      "commits": 2,
+      "pushedAt": "2023-07-18T22:24:10Z",
+      "createdAt": "2023-07-14T05:29:32Z",
+      "readmeSummary": null
+    },
+    {
+      "name": "RDBMS---NoSQL-assignments",
+      "description": null,
+      "url": "https://github.com/yash-3010/RDBMS---NoSQL-assignments",
+      "homepage": null,
+      "language": null,
+      "languages": [],
+      "topics": [],
+      "stars": 0,
+      "openIssues": 0,
+      "forks": 0,
+      "commits": 2,
+      "pushedAt": "2023-07-07T21:12:19Z",
+      "createdAt": "2023-07-07T21:03:32Z",
+      "readmeSummary": null
     }
   ],
   "contributions": [
@@ -1605,6 +1793,6 @@
       "count": 10
     }
   ],
-  "fetchedAt": "2026-07-02T12:00:00Z",
+  "fetchedAt": "2026-07-04T18:24:57.207Z",
   "seed": true
 }

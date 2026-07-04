@@ -1,12 +1,14 @@
 import { useMemo } from 'react'
 import { Line } from '@react-three/drei'
-import type { PlanetSpec } from '../lib/galaxy'
-import { SUN_RADIUS } from '../lib/galaxy'
+import { C_ORBIT_RADIUS } from '../lib/galaxy'
+import type { DwarfSpec, PlanetSpec } from '../lib/galaxy'
 import { useGalaxyStore } from '../state/store'
 
 const SEGMENTS = 128
 const BASE_OPACITY = 0.13
 const LIT_OPACITY = 0.45
+const DWARF_OPACITY = 0.07
+const DWARF_COLOR = '#8a93a6'
 
 /** Orbit rings never intercept the pointer. */
 const noRaycast = () => null
@@ -15,7 +17,7 @@ const noRaycast = () => null
  * Samples the same inclined circular orbit as planetPositionAt over the full
  * angle domain (the phase offset is irrelevant for a closed ring).
  */
-function orbitPoints(spec: PlanetSpec): [number, number, number][] {
+function orbitPoints(spec: Pick<PlanetSpec, 'orbitRadius' | 'inclination'>): [number, number, number][] {
   const points: [number, number, number][] = []
   const sinIncl = Math.sin(spec.inclination)
   for (let i = 0; i <= SEGMENTS; i++) {
@@ -28,16 +30,7 @@ function orbitPoints(spec: PlanetSpec): [number, number, number][] {
   return points
 }
 
-function circlePoints(radius: number): [number, number, number][] {
-  const points: [number, number, number][] = []
-  for (let i = 0; i <= SEGMENTS; i++) {
-    const angle = (i / SEGMENTS) * Math.PI * 2
-    points.push([Math.cos(angle) * radius, 0, Math.sin(angle) * radius])
-  }
-  return points
-}
-
-export function Orbits({ planets }: { planets: PlanetSpec[] }) {
+export function Orbits({ planets, dwarfs }: { planets: PlanetSpec[]; dwarfs: DwarfSpec[] }) {
   const hovered = useGalaxyStore((s) => s.hovered)
   const focus = useGalaxyStore((s) => s.focus)
   const focusName = focus?.kind === 'planet' ? focus.name : null
@@ -46,7 +39,14 @@ export function Orbits({ planets }: { planets: PlanetSpec[] }) {
     () => planets.map((spec) => ({ spec, points: orbitPoints(spec) })),
     [planets],
   )
-  const referenceRing = useMemo(() => circlePoints(SUN_RADIUS * 1.9), [])
+  const dwarfRings = useMemo(
+    () => dwarfs.map((spec) => ({ name: spec.name, points: orbitPoints(spec) })),
+    [dwarfs],
+  )
+  const cRing = useMemo(
+    () => orbitPoints({ orbitRadius: C_ORBIT_RADIUS, inclination: 0 }),
+    [],
+  )
 
   return (
     <group>
@@ -67,13 +67,27 @@ export function Orbits({ planets }: { planets: PlanetSpec[] }) {
         )
       })}
 
-      {/* Faint inner reference ring for depth near the sun. */}
+      {/* Dwarf planets ride the faintest, colorless rings. */}
+      {dwarfRings.map(({ name, points }) => (
+        <Line
+          key={name}
+          points={points}
+          color={DWARF_COLOR}
+          lineWidth={1}
+          transparent
+          opacity={DWARF_OPACITY}
+          depthWrite={false}
+          raycast={noRaycast}
+        />
+      ))}
+
+      {/* Star C's distant loop — a blue whisper so the companion is findable. */}
       <Line
-        points={referenceRing}
-        color="#ffffff"
+        points={cRing}
+        color="#7ea8ff"
         lineWidth={1}
         transparent
-        opacity={0.05}
+        opacity={0.09}
         depthWrite={false}
         raycast={noRaycast}
       />

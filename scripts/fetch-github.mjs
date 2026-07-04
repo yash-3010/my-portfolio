@@ -333,6 +333,7 @@ async function buildRepo(raw, enrich) {
     languages: raw.language ? [raw.language] : [],
     topics: Array.isArray(raw.topics) ? raw.topics : [],
     stars: raw.stargazers_count ?? 0,
+    openIssues: raw.open_issues_count ?? 0,
     forks: raw.forks_count ?? 0,
     commits: 5,
     pushedAt: raw.pushed_at,

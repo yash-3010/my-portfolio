@@ -24,6 +24,8 @@ export interface GalaxyRepo {
   forks: number
   /** Commit count on the default branch (drives planet size). */
   commits: number
+  /** Open issue count (drives storm systems on the planet surface). */
+  openIssues?: number
   pushedAt: string
   createdAt: string
   /** First meaningful paragraph of the README, markdown stripped. */

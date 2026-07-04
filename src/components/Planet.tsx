@@ -1,29 +1,59 @@
-import { useEffect, useRef } from 'react'
-import { AdditiveBlending, Vector3 } from 'three'
-import type { Group, Mesh, MeshStandardMaterial } from 'three'
+import { useEffect, useMemo, useRef } from 'react'
+import { AdditiveBlending, DoubleSide, ShaderMaterial, Vector3 } from 'three'
+import type { Group, Mesh } from 'three'
 import { useFrame } from '@react-three/fiber'
 import type { ThreeEvent } from '@react-three/fiber'
-import { Html, useCursor } from '@react-three/drei'
+import { Html, useCursor, useTexture } from '@react-three/drei'
 import type { PlanetSpec } from '../lib/galaxy'
 import { moonPositionAt, planetPositionAt } from '../lib/galaxy'
+import {
+  MOON_TEXTURES,
+  NIGHT_TEXTURE,
+  RING_TEXTURE,
+  configurePlanetTexture,
+  makePlanetSurface,
+  planetTextureUrl,
+} from '../lib/planetSurface'
 import { galaxyClock, planetPositions, useGalaxyStore } from '../state/store'
 import { getGlowTexture } from './Sun'
 
 const STAR_MOON_COLOR = '#ffe9b8'
-const FORK_MOON_COLOR = '#9aa3b2'
+/* Near-white: it tints the real lunar texture, no longer a flat color. */
+const FORK_MOON_COLOR = '#cdd2da'
 const DRAG_THRESHOLD_PX = 8
 
 /** Module-level scratch vectors — never allocated in the frame loop. */
 const tmpPlanet = new Vector3()
 const tmpMoon = new Vector3()
 
-export function Planet({ spec }: { spec: PlanetSpec }) {
+/* Planetary ring: Saturn's real ring imagery, sampled radially. The source
+   texture is a 2048x125 strip where x runs inner edge -> outer edge. */
+const RING_VERTEX = /* glsl */ `
+  varying vec2 vLocal;
+  void main() {
+    vLocal = position.xy;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`
+const RING_FRAGMENT = /* glsl */ `
+  uniform sampler2D uMap;
+  uniform float uInner;
+  uniform float uOuter;
+  varying vec2 vLocal;
+  void main() {
+    float r = length(vLocal);
+    float t = (r - uInner) / (uOuter - uInner);
+    if (t < 0.0 || t > 1.0) discard;
+    vec4 tex = texture2D(uMap, vec2(t, 0.5));
+    gl_FragColor = vec4(tex.rgb, tex.a * 0.9);
+  }
+`
+
+export function Planet({ spec, textureFile }: { spec: PlanetSpec; textureFile: string }) {
   const name = spec.repo.name
   const biome = spec.biome
   const groupRef = useRef<Group>(null)
   const bodyRef = useRef<Mesh>(null)
-  const coreRef = useRef<Mesh>(null)
-  const bodyMatRef = useRef<MeshStandardMaterial>(null)
   const moonRefs = useRef<(Mesh | null)[]>([])
 
   // Persistent world-position vector shared with the camera rig via the store map.
@@ -39,6 +69,46 @@ export function Planet({ spec }: { spec: PlanetSpec }) {
   const isFocused = focus?.kind === 'planet' && focus.name === name
   const showLabel = (isHovered || spec.highlight) && !isFocused
   useCursor(isHovered)
+
+  /* Shared texture cache: every planet reuses the same loaded instances. */
+  const [dayMap, nightMap, ringMap, ...moonMaps] = useTexture(
+    [
+      planetTextureUrl(textureFile),
+      planetTextureUrl(NIGHT_TEXTURE),
+      planetTextureUrl(RING_TEXTURE),
+      ...MOON_TEXTURES.map(planetTextureUrl),
+    ],
+    configurePlanetTexture,
+  )
+
+  /* Textured surface + ring resources. */
+  const surface = useMemo(
+    () => makePlanetSurface(spec, dayMap, nightMap),
+    [spec, dayMap, nightMap],
+  )
+  const ringMaterial = useMemo(() => {
+    if (!spec.ring) return null
+    return new ShaderMaterial({
+      uniforms: {
+        uMap: { value: ringMap },
+        uInner: { value: spec.ring.inner * spec.size },
+        uOuter: { value: spec.ring.outer * spec.size },
+      },
+      vertexShader: RING_VERTEX,
+      fragmentShader: RING_FRAGMENT,
+      transparent: true,
+      depthWrite: false,
+      side: DoubleSide,
+    })
+  }, [spec, ringMap])
+
+  useEffect(
+    () => () => {
+      surface.dispose()
+      ringMaterial?.dispose()
+    },
+    [surface, ringMaterial],
+  )
 
   useEffect(() => {
     const v = worldPosRef.current!
@@ -61,15 +131,7 @@ export function Planet({ spec }: { spec: PlanetSpec }) {
     // Everything else stays alive on wall-clock time while frozen.
     const et = state.clock.getElapsedTime()
     if (bodyRef.current) bodyRef.current.rotation.y = et * spec.spin
-    const core = coreRef.current
-    if (core) {
-      core.rotation.y = -et * spec.spin * 0.6
-      core.rotation.x = et * spec.spin * 0.35
-    }
-    if (spec.active && bodyMatRef.current) {
-      bodyMatRef.current.emissiveIntensity =
-        0.55 + Math.sin(et * 1.4 + spec.phase) * 0.18
-    }
+
     for (let i = 0; i < spec.moons.length; i++) {
       const mesh = moonRefs.current[i]
       const moon = spec.moons[i]
@@ -87,102 +149,96 @@ export function Planet({ spec }: { spec: PlanetSpec }) {
   }
 
   return (
-    <group ref={groupRef} name={`planet-${name}`}>
-      {/* Outer shell: primary biome surface. */}
-      <mesh ref={bodyRef}>
-        <icosahedronGeometry args={[spec.size, 1]} />
-        <meshStandardMaterial
-          ref={bodyMatRef}
-          color={biome.color}
-          flatShading
-          roughness={0.85}
-          emissive={spec.active ? biome.glow : biome.color}
-          emissiveIntensity={spec.active ? 0.55 : 0.08}
-        />
-      </mesh>
-
-      {/* Inner accent core, counter-rotating: its vertices pierce the shell's
-          faces, reading as low-poly continents / terrain relief. */}
-      <mesh ref={coreRef} rotation={[0.7, 0.3, 0.5]}>
-        <icosahedronGeometry args={[spec.size * 0.92, 1]} />
-        <meshStandardMaterial
-          color={biome.accent}
-          flatShading
-          roughness={0.95}
-          emissive={biome.accent}
-          emissiveIntensity={0.05}
-        />
-      </mesh>
-
-      {/* Additive halo for recently-active repos. */}
-      {spec.active && (
-        <sprite scale={spec.size * 4}>
-          <spriteMaterial
-            map={getGlowTexture()}
-            color={biome.glow}
-            transparent
-            opacity={0.35}
-            depthWrite={false}
-            blending={AdditiveBlending}
-          />
-        </sprite>
-      )}
-
-      {/* Moons: stars are pale gold specks, forks are grey rocks. */}
-      {spec.moons.map((moon, i) => (
-        <mesh
-          key={i}
-          ref={(el) => {
-            moonRefs.current[i] = el
-          }}
-        >
-          <icosahedronGeometry args={[moon.size, 0]} />
-          <meshStandardMaterial
-            color={moon.kind === 'star' ? STAR_MOON_COLOR : FORK_MOON_COLOR}
-            flatShading
-            roughness={0.9}
-            emissive={moon.kind === 'star' ? STAR_MOON_COLOR : '#000000'}
-            emissiveIntensity={moon.kind === 'star' ? 0.45 : 0}
-          />
+    <>
+      <group ref={groupRef} name={`planet-${name}`}>
+        {/* The planet: real imagery, custom-lit from the sun at the origin. */}
+        <mesh ref={bodyRef} material={surface}>
+          <sphereGeometry args={[spec.size, 48, 32]} />
         </mesh>
-      ))}
 
-      {/* Invisible padded hit target — R3F raycasts invisible meshes. Capped
-          so it can never occlude a neighboring planet's visible body. */}
-      <mesh
-        visible={false}
-        onClick={handleClick}
-        onPointerOver={(e) => {
-          e.stopPropagation()
-          setHovered(name)
-        }}
-        onPointerOut={() => setHovered(null)}
-      >
-        <sphereGeometry args={[Math.min(Math.max(spec.size * 1.6, 1.0), 1.2), 12, 12]} />
-      </mesh>
-
-      {showLabel && (
-        <Html
-          position={[0, spec.size + 0.9, 0]}
-          center
-          distanceFactor={16}
-          // Keep labels below the 2D overlay layer (loading z=100, card z=20).
-          zIndexRange={[8, 0]}
-          style={{ pointerEvents: 'none' }}
-        >
-          <div
-            className="planet-label"
-            style={
-              spec.highlight && !isHovered ? { opacity: 0.75 } : undefined
-            }
+        {/* Planetary ring (most-starred repo wears one). */}
+        {spec.ring && ringMaterial && (
+          <mesh
+            material={ringMaterial}
+            rotation={[-Math.PI / 2 + spec.ring.tilt, 0, spec.seed]}
+            raycast={() => null}
           >
-            <span className="planet-label__name">{name}</span>
-            <span className="planet-label__lang" style={{ color: biome.color }}>
-              {spec.repo.language ?? biome.language}
-            </span>
-          </div>
-        </Html>
-      )}
-    </group>
+            <ringGeometry
+              args={[spec.ring.inner * spec.size, spec.ring.outer * spec.size, 96]}
+            />
+          </mesh>
+        )}
+
+        {/* Faint additive halo so recently-active repos still read from afar. */}
+        {spec.active && (
+          <sprite scale={spec.size * 3.2} raycast={() => null}>
+            <spriteMaterial
+              map={getGlowTexture()}
+              color={biome.glow}
+              transparent
+              opacity={0.16}
+              depthWrite={false}
+              blending={AdditiveBlending}
+            />
+          </sprite>
+        )}
+
+        {/* Moons: real lunar imagery — stars tinted warm gold, forks plain rock. */}
+        {spec.moons.map((moon, i) => (
+          <mesh
+            key={i}
+            ref={(el) => {
+              moonRefs.current[i] = el
+            }}
+            castShadow={false}
+          >
+            <sphereGeometry args={[moon.size, 16, 12]} />
+            <meshStandardMaterial
+              map={moonMaps[moon.textureIndex]}
+              color={moon.kind === 'star' ? STAR_MOON_COLOR : FORK_MOON_COLOR}
+              roughness={0.9}
+              emissive={moon.kind === 'star' ? STAR_MOON_COLOR : '#000000'}
+              emissiveIntensity={moon.kind === 'star' ? 0.22 : 0}
+            />
+          </mesh>
+        ))}
+
+        {/* Invisible padded hit target — R3F raycasts invisible meshes. Capped
+            so it can never occlude a neighboring planet's visible body (slot
+            gaps are ≥ 0.5 AU = 7 world units). */}
+        <mesh
+          visible={false}
+          onClick={handleClick}
+          onPointerOver={(e) => {
+            e.stopPropagation()
+            setHovered(name)
+          }}
+          onPointerOut={() => setHovered(null)}
+        >
+          <sphereGeometry args={[Math.min(Math.max(spec.size * 1.8, 1.4), 2.2), 12, 12]} />
+        </mesh>
+
+        {showLabel && (
+          <Html
+            position={[0, spec.size + 0.9, 0]}
+            center
+            distanceFactor={16}
+            // Keep labels below the 2D overlay layer (loading z=100, card z=20).
+            zIndexRange={[8, 0]}
+            style={{ pointerEvents: 'none' }}
+          >
+            <div
+              className="planet-label"
+              style={spec.highlight && !isHovered ? { opacity: 0.75 } : undefined}
+            >
+              <span className="planet-label__name">{name}</span>
+              <span className="planet-label__lang" style={{ color: biome.color }}>
+                {spec.repo.language ?? biome.language}
+              </span>
+            </div>
+          </Html>
+        )}
+      </group>
+    </>
   )
 }

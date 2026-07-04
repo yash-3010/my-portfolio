@@ -1,22 +1,25 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   AdditiveBlending,
   BackSide,
   CanvasTexture,
   Color,
   ShaderMaterial,
+  Vector3,
 } from 'three'
-import type { Mesh, SpriteMaterial } from 'three'
+import type { Group, Mesh } from 'three'
 import { useFrame } from '@react-three/fiber'
 import type { ThreeEvent } from '@react-three/fiber'
-import { Sparkles, useCursor } from '@react-three/drei'
+import { useCursor, useTexture } from '@react-three/drei'
 import type { GalaxyUser } from '../types'
 import { SUN } from '../lib/palette'
-import { SUN_RADIUS } from '../lib/galaxy'
-import { useGalaxyStore } from '../state/store'
+import { STARS, starPositionAt } from '../lib/galaxy'
+import type { StarSpec } from '../lib/galaxy'
+import { configurePlanetTexture, planetTextureUrl } from '../lib/planetSurface'
+import { galaxyClock, useGalaxyStore } from '../state/store'
 
 /* ---------------------------------------------------------------- */
-/* Shared procedural glow texture (also used by Planet glow sprites) */
+/* Shared procedural glow texture (used by Planet active halos)      */
 /* ---------------------------------------------------------------- */
 
 let glowTexture: CanvasTexture | null = null
@@ -44,11 +47,11 @@ export function getGlowTexture(): CanvasTexture {
 }
 
 /* ---------------------------------------------------------------- */
-/* Fresnel atmosphere: additive rim shell so the sun reads as a      */
-/* ball of light instead of a flat emissive disc.                    */
+/* Chromosphere rim: a THIN emission ring hugging the limb, like the */
+/* red fringe in SDO 304 Å photographs — not a wide halo.            */
 /* ---------------------------------------------------------------- */
 
-const ATMOSPHERE_VERTEX = /* glsl */ `
+const RIM_VERTEX = /* glsl */ `
   varying vec3 vNormal;
   varying vec3 vViewDir;
   void main() {
@@ -58,68 +61,85 @@ const ATMOSPHERE_VERTEX = /* glsl */ `
     gl_Position = projectionMatrix * mvPosition;
   }
 `
-
-const ATMOSPHERE_FRAGMENT = /* glsl */ `
+const RIM_FRAGMENT = /* glsl */ `
   uniform vec3 uColor;
   varying vec3 vNormal;
   varying vec3 vViewDir;
   void main() {
-    // BackSide shell: strongest where the surface silhouettes against space.
-    float rim = pow(1.0 - abs(dot(normalize(vNormal), normalize(vViewDir))), 2.4);
-    gl_FragColor = vec4(uColor, rim * 0.85);
+    // BackSide shell: alpha peaks right at the star's limb and dies fast,
+    // so the glow sits just above the surface.
+    float d = abs(dot(normalize(vNormal), normalize(vViewDir)));
+    float rim = pow(d, 6.0);
+    gl_FragColor = vec4(uColor * 1.5, rim);
   }
 `
 
 const DRAG_THRESHOLD_PX = 8
 
-export function Sun({ user }: { user: GalaxyUser }) {
-  const coreRef = useRef<Mesh>(null)
-  const glowMatRef = useRef<SpriteMaterial>(null)
+/** Photosphere HDR push: the bloom pass bleeds each star's own color. */
+const SURFACE_BOOST: [number, number, number] = [1.5, 1.5, 1.5]
+
+/** Module-level scratch vector — never allocated in the frame loop. */
+const tmpStar = new Vector3()
+
+/**
+ * One member of the triple: real photosphere imagery pushed into HDR with a
+ * thin chromosphere rim hugging the limb. Every star orbits the barycenter
+ * on the frozen-while-focused galaxy clock; clicking any of them opens the
+ * about-me card.
+ */
+function Star({ spec }: { spec: StarSpec }) {
+  const groupRef = useRef<Group>(null)
+  const bodyRef = useRef<Mesh>(null)
   const [hovered, setHovered] = useState(false)
   const setFocus = useGalaxyStore((s) => s.setFocus)
   useCursor(hovered)
 
-  const atmosphereMaterial = useMemo(
+  const sunMap = useTexture(planetTextureUrl(spec.texture), configurePlanetTexture)
+
+  const rimMaterial = useMemo(
     () =>
       new ShaderMaterial({
-        uniforms: { uColor: { value: new Color(SUN.glow) } },
-        vertexShader: ATMOSPHERE_VERTEX,
-        fragmentShader: ATMOSPHERE_FRAGMENT,
+        uniforms: { uColor: { value: new Color(spec.flareColor) } },
+        vertexShader: RIM_VERTEX,
+        fragmentShader: RIM_FRAGMENT,
         blending: AdditiveBlending,
         transparent: true,
         depthWrite: false,
         side: BackSide,
       }),
-    [],
+    [spec.flareColor],
   )
+  useEffect(() => () => rimMaterial.dispose(), [rimMaterial])
 
   useFrame((state) => {
+    const group = groupRef.current
+    if (group) {
+      // Orbital motion runs on the freezable galaxy clock (years).
+      starPositionAt(spec, galaxyClock.t, tmpStar)
+      group.position.copy(tmpStar)
+    }
+    // Slow self-rotation stays alive on wall-clock time while frozen.
     const t = state.clock.getElapsedTime()
-    const core = coreRef.current
+    const core = bodyRef.current
     if (core) {
       core.rotation.y = t * 0.06
-      core.rotation.x = Math.sin(t * 0.11) * 0.08
-      core.scale.setScalar(1 + Math.sin(t * 1.1) * 0.015)
+      core.scale.setScalar(1 + Math.sin(t * 1.1 + spec.phase) * 0.012)
     }
-    const glow = glowMatRef.current
-    if (glow) glow.opacity = 0.5 + Math.sin(t * 1.5) * 0.06
   })
 
   const handleClick = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation()
     // R3F tracks pointer travel since pointerdown; big delta = drag, not a tap.
     if (e.delta > DRAG_THRESHOLD_PX) return
-    setFocus({ kind: 'sun' })
+    // Carry the star id so the camera frames THIS star (matters for C).
+    setFocus({ kind: 'sun', star: spec.id })
   }
 
   return (
-    <group name={`sun-${user.login}`}>
-      {/* The scene's key light lives at the sun's core. Decay is kept gentle
-          so the outermost orbit ring still receives real light. */}
-      <pointLight color={SUN.light} intensity={300} decay={1.5} />
-
+    <group ref={groupRef} name={`star-${spec.id}`}>
       <mesh
-        ref={coreRef}
+        ref={bodyRef}
         onClick={handleClick}
         onPointerOver={(e) => {
           e.stopPropagation()
@@ -127,44 +147,30 @@ export function Sun({ user }: { user: GalaxyUser }) {
         }}
         onPointerOut={() => setHovered(false)}
       >
-        <icosahedronGeometry args={[SUN_RADIUS, 2]} />
-        {/* Emissive pushed past the bloom threshold: the composer supplies the
-            light bleed, the facets keep visible tonal variation. */}
-        <meshStandardMaterial
-          color="#ffb45e"
-          emissive={SUN.core}
-          emissiveIntensity={1.15}
-          flatShading
-          roughness={0.6}
-        />
+        <sphereGeometry args={[spec.radius, 48, 32]} />
+        {/* Photosphere pushed past the bloom threshold: the composer bleeds
+            each star's own color over its limb (fog off so the distant O
+            companion stays a visible beacon). */}
+        <meshBasicMaterial map={sunMap} color={SURFACE_BOOST} fog={false} />
       </mesh>
 
-      {/* Fresnel rim shell. */}
-      <mesh scale={1.28} material={atmosphereMaterial} raycast={() => null}>
-        <icosahedronGeometry args={[SUN_RADIUS, 3]} />
+      {/* Thin chromosphere rim, just above the surface. */}
+      <mesh scale={1.08} material={rimMaterial} raycast={() => null}>
+        <sphereGeometry args={[spec.radius, 48, 32]} />
       </mesh>
+    </group>
+  )
+}
 
-      {/* Additive halo. */}
-      <sprite scale={7} raycast={() => null}>
-        <spriteMaterial
-          ref={glowMatRef}
-          map={getGlowTexture()}
-          color={SUN.glow}
-          transparent
-          opacity={0.5}
-          depthWrite={false}
-          blending={AdditiveBlending}
-        />
-      </sprite>
-
-      <Sparkles
-        count={36}
-        scale={7.5}
-        size={3}
-        speed={0.35}
-        color={SUN.core}
-        opacity={0.7}
-      />
+export function Sun({ user }: { user: GalaxyUser }) {
+  return (
+    <group name={`trisolaris-${user.login}`}>
+      {/* The scene's key light sits at the barycenter — the tight binary
+          whirls around it so closely that one light stands in for both. */}
+      <pointLight color={SUN.light} intensity={3000} decay={1.5} />
+      {STARS.map((spec) => (
+        <Star key={spec.id} spec={spec} />
+      ))}
     </group>
   )
 }

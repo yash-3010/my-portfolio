@@ -8,9 +8,20 @@ import { HUD } from './components/HUD'
 import { ProjectCard } from './components/ProjectCard'
 import { LoadingScreen } from './components/LoadingScreen'
 import data from './data/github.json'
+import manualRepos from './data/manual-repos.json'
 
-/** Cast once — the JSON import gives wide types. */
-const galaxyData = data as GalaxyData
+/** Cast once — the JSON import gives wide types. Manual repos (work projects
+    the API can't see) ride along; the fetch script never touches that file. */
+const fetched = data as GalaxyData
+const galaxyData: GalaxyData = {
+  ...fetched,
+  repos: [
+    ...fetched.repos,
+    ...(manualRepos as GalaxyData['repos']).filter(
+      (m) => !fetched.repos.some((r) => r.name === m.name),
+    ),
+  ],
+}
 
 function App() {
   const layout = useMemo(() => buildGalaxy(galaxyData), [])

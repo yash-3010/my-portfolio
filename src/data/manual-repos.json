@@ -1,0 +1,18 @@
+[
+  {
+    "name": "psmf-manager",
+    "description": "PSMF management platform — my main project (company repo). EDIT ME: write the public-safe description you want on the card.",
+    "url": "",
+    "homepage": null,
+    "language": "Ruby",
+    "languages": ["Ruby"],
+    "topics": ["rails", "work"],
+    "stars": 0,
+    "forks": 0,
+    "commits": 400,
+    "openIssues": 0,
+    "pushedAt": "2026-07-01T00:00:00Z",
+    "createdAt": "2024-06-01T00:00:00Z",
+    "readmeSummary": null
+  }
+]
