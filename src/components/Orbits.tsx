@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { Line } from '@react-three/drei'
-import { C_ORBIT_RADIUS } from '../lib/galaxy'
+import { STARS, orbitPathPoints } from '../lib/galaxy'
 import type { DwarfSpec, PlanetSpec } from '../lib/galaxy'
 import { useGalaxyStore } from '../state/store'
 
@@ -13,40 +13,33 @@ const DWARF_COLOR = '#8a93a6'
 /** Orbit rings never intercept the pointer. */
 const noRaycast = () => null
 
-/**
- * Samples the same inclined circular orbit as planetPositionAt over the full
- * angle domain (the phase offset is irrelevant for a closed ring).
- */
-function orbitPoints(spec: Pick<PlanetSpec, 'orbitRadius' | 'inclination'>): [number, number, number][] {
-  const points: [number, number, number][] = []
-  const sinIncl = Math.sin(spec.inclination)
-  for (let i = 0; i <= SEGMENTS; i++) {
-    const angle = (i / SEGMENTS) * Math.PI * 2
-    const x = Math.cos(angle) * spec.orbitRadius
-    const z = Math.sin(angle) * spec.orbitRadius
-    const y = Math.sin(angle) * spec.orbitRadius * sinIncl * 0.35
-    points.push([x, y, z])
-  }
-  return points
-}
-
 export function Orbits({ planets, dwarfs }: { planets: PlanetSpec[]; dwarfs: DwarfSpec[] }) {
   const hovered = useGalaxyStore((s) => s.hovered)
   const focus = useGalaxyStore((s) => s.focus)
   const focusName = focus?.kind === 'planet' ? focus.name : null
 
+  // All rings sample the same Kepler ellipses the bodies actually fly
+  // (orbitPathPoints), so lines and planets can never drift apart.
   const rings = useMemo(
-    () => planets.map((spec) => ({ spec, points: orbitPoints(spec) })),
+    () => planets.map((spec) => ({ spec, points: orbitPathPoints(spec, SEGMENTS) })),
     [planets],
   )
   const dwarfRings = useMemo(
-    () => dwarfs.map((spec) => ({ name: spec.name, points: orbitPoints(spec) })),
+    () => dwarfs.map((spec) => ({ name: spec.name, points: orbitPathPoints(spec, SEGMENTS) })),
     [dwarfs],
   )
-  const cRing = useMemo(
-    () => orbitPoints({ orbitRadius: C_ORBIT_RADIUS, inclination: 0 }),
-    [],
-  )
+  const cRing = useMemo(() => {
+    const c = STARS.find((s) => s.id === 'C')!
+    return orbitPathPoints(
+      {
+        orbitRadius: c.orbitRadius,
+        eccentricity: c.eccentricity,
+        periapsis: c.periapsis,
+        inclination: 0,
+      },
+      SEGMENTS,
+    )
+  }, [])
 
   return (
     <group>

@@ -13,7 +13,7 @@ import { Planet } from './Planet'
 import { DwarfPlanet } from './DwarfPlanet'
 import { AsteroidBelt } from './AsteroidBelt'
 import { Orbits } from './Orbits'
-import { CameraRig } from './CameraRig'
+import { CameraRig, introStartPosition } from './CameraRig'
 
 /**
  * Advances the galaxy clock in simulated years. `scale` eases toward 0 while
@@ -131,7 +131,7 @@ export function GalaxyCanvas({ data, layout }: { data: GalaxyData; layout: Galax
           // (3.6·maxR + 6·maxR ≈ 9.6·maxR). Per-primitive far-plane clipping
           // ignores frustumCulled={false}, so this can't be undersized.
           far: Math.max(300, maxR * 12),
-          position: [0, layout.frameRadius * 1.3, layout.frameRadius * 1.7],
+          position: introStartPosition(layout.frameRadius),
         }}
         gl={{ antialias: true, powerPreference: 'high-performance' }}
         onPointerMissed={(e) => {

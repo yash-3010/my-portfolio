@@ -51,17 +51,54 @@ export function circumbinaryPeriod(aAU: number): number {
 export const P_BIN = keplerPeriod(A_BIN, M_AB)
 export const P_OUT = keplerPeriod(A_OUT, M_OUT)
 
+/** Binary pair eccentricity — the two stars orbit an EMPTY focus, tightening
+    and widening every period instead of riding a perfect circle. */
+const BIN_ECCENTRICITY = 0.2
+
+/* ---------------------------------------------------------------- */
+/* Kepler machinery: real elliptical motion, not circles             */
+/* ---------------------------------------------------------------- */
+
+/** Solve Kepler's equation M = E − e·sinE for E (Newton; e ≤ 0.35 converges
+    in a handful of steps). */
+function eccentricAnomaly(M: number, e: number): number {
+  let E = M
+  for (let i = 0; i < 5; i++) {
+    E -= (E - e * Math.sin(E) - M) / (1 - e * Math.cos(E))
+  }
+  return E
+}
+
+/** Planar position on an ellipse whose FOCUS sits at the origin — semi-major
+    axis a, eccentricity e, periapsis argument ω, mean anomaly M. True Kepler
+    timing: bodies sweep faster through periapsis. Writes {x, z} into out. */
+const keplerXZ = { x: 0, z: 0 }
+function keplerPoint(a: number, e: number, omega: number, M: number): { x: number; z: number } {
+  const E = eccentricAnomaly(M, e)
+  const px = a * (Math.cos(E) - e)
+  const pz = a * Math.sqrt(1 - e * e) * Math.sin(E)
+  const cos = Math.cos(omega)
+  const sin = Math.sin(omega)
+  keplerXZ.x = px * cos - pz * sin
+  keplerXZ.z = px * sin + pz * cos
+  return keplerXZ
+}
+
 export interface StarSpec {
   id: 'A' | 'B' | 'C'
   starType: 'G' | 'K' | 'O'
   /** Photosphere radius, world units. */
   radius: number
-  /** Orbit radius around the system barycenter, world units. */
+  /** Orbit SEMI-MAJOR axis around the system barycenter, world units. */
   orbitRadius: number
   /** Orbital period, years. */
   period: number
-  /** Orbit angle at t=0, radians. */
+  /** Mean anomaly at t=0, radians. */
   phase: number
+  /** Orbit eccentricity (the pair shares one; C has its own). */
+  eccentricity: number
+  /** Argument of periapsis, radians. */
+  periapsis: number
   /** Photosphere texture in public/assets/planets/. */
   texture: string
   /** Chromosphere rim + solar-prominence plasma color (SDO 304 Å style). */
@@ -78,6 +115,8 @@ export const STARS: StarSpec[] = [
     orbitRadius: A_BIN * (M_B / M_AB) * AU,
     period: P_BIN,
     phase: 0,
+    eccentricity: BIN_ECCENTRICITY,
+    periapsis: 0.8,
     texture: '2k_sun.jpg',
     flareColor: '#ff7a3a',
   },
@@ -87,7 +126,9 @@ export const STARS: StarSpec[] = [
     radius: 2.4,
     orbitRadius: A_BIN * (M_A / M_AB) * AU,
     period: P_BIN,
-    phase: Math.PI,
+    phase: 0,
+    eccentricity: BIN_ECCENTRICITY,
+    periapsis: 0.8,
     texture: '2k_sun_red.jpg',
     flareColor: '#ff4a2c',
   },
@@ -99,6 +140,8 @@ export const STARS: StarSpec[] = [
     orbitRadius: A_OUT * AU,
     period: P_OUT,
     phase: 2.1,
+    eccentricity: 0.3,
+    periapsis: 4.2,
     texture: '2k_sun_blue.jpg',
     flareColor: '#9cc4ff',
   },
@@ -115,15 +158,31 @@ export const BELT = {
   period: keplerPeriod(2.0, M_AB),
 }
 
-/** How far the binary reaches from the barycenter (orbit + body). */
+/** How far the binary reaches from the barycenter (apoapsis + body). */
 export const BINARY_EXTENT = Math.max(
-  ...STARS.filter((s) => s.id !== 'C').map((s) => s.orbitRadius + s.radius),
+  ...STARS.filter((s) => s.id !== 'C').map(
+    (s) => s.orbitRadius * (1 + s.eccentricity) + s.radius,
+  ),
 )
 
-/** Star position on its flat circular orbit at galaxy-time t (years). */
+/**
+ * Star position at galaxy-time t (years). A and B are one two-body system:
+ * the SEPARATION vector is solved once on the pair's shared ellipse, then
+ * each star takes its mass-weighted share on opposite sides — so the
+ * barycenter stays exactly at the origin while the pair tightens and widens.
+ * C rides its own eccentric loop around everything.
+ */
 export function starPositionAt(s: StarSpec, t: number, out: Vector3): Vector3 {
-  const angle = s.phase + (TAU * t) / s.period
-  return out.set(Math.cos(angle) * s.orbitRadius, 0, Math.sin(angle) * s.orbitRadius)
+  const M = s.phase + (TAU * t) / s.period
+  if (s.id === 'C') {
+    const p = keplerPoint(s.orbitRadius, s.eccentricity, s.periapsis, M)
+    return out.set(p.x, 0, p.z)
+  }
+  // Separation ellipse sampled at unit semi-major axis; sign puts the two
+  // stars on opposite sides of the (empty) focus.
+  const p = keplerPoint(1, s.eccentricity, s.periapsis, M)
+  const share = s.orbitRadius * (s.id === 'A' ? 1 : -1)
+  return out.set(p.x * share, 0, p.z * share)
 }
 
 /* ---------------------------------------------------------------- */
@@ -181,12 +240,16 @@ export interface PlanetSpec {
   size: number
   /** Distance from the barycenter (driven by recency: recent = close). */
   orbitRadius: number
-  /** Orbit angle at t=0, radians. */
+  /** Mean anomaly at t=0, radians. */
   phase: number
   /** Circumbinary Kepler period, years — inner planets lap outer ones. */
   period: number
   /** Orbital plane tilt, radians. */
   inclination: number
+  /** Orbit eccentricity — real ellipses, the barycenter sits at a focus. */
+  eccentricity: number
+  /** Argument of periapsis, radians. */
+  periapsis: number
   /** Pushed within ACTIVE_WINDOW_DAYS -> glows. */
   active: boolean
   /** Featured project (bigger label priority). */
@@ -212,6 +275,9 @@ export interface DwarfSpec {
   period: number
   phase: number
   inclination: number
+  /** Real dwarf planets ride noticeably eccentric orbits (think Pluto). */
+  eccentricity: number
+  periapsis: number
   /** Self-rotation speed, radians per second. */
   spin: number
 }
@@ -381,6 +447,10 @@ export function buildGalaxy(data: GalaxyData): GalaxyLayout {
       phase,
       period: slot.per,
       inclination: (rand() - 0.5) * 0.24,
+      // Gentle ellipses: enough to read as real, never enough to cross the
+      // neighboring slot or dive through the asteroid belt.
+      eccentricity: 0.03 + rand() * 0.09,
+      periapsis: rand() * TAU,
       active: daysSince(repo.pushedAt, now) <= ACTIVE_WINDOW_DAYS,
       highlight: HIGHLIGHT_REPOS.has(repo.name),
       moons: buildMoons(repo, MIN_PLANET_SIZE + (MAX_PLANET_SIZE - MIN_PLANET_SIZE) * sizeT, rand),
@@ -411,6 +481,8 @@ export function buildGalaxy(data: GalaxyData): GalaxyLayout {
       period: slot.per,
       phase: rand() * TAU,
       inclination: (rand() - 0.5) * 0.24,
+      eccentricity: 0.08 + rand() * 0.14,
+      periapsis: rand() * TAU,
       spin: 0.05 + rand() * 0.12,
     })
   }
@@ -431,17 +503,43 @@ export function buildGalaxy(data: GalaxyData): GalaxyLayout {
 /* Frame-time helpers                                                */
 /* ---------------------------------------------------------------- */
 
-/** Body position on its inclined circumbinary orbit at galaxy-time t (years). */
-export function planetPositionAt(
-  p: Pick<PlanetSpec, 'phase' | 'period' | 'orbitRadius' | 'inclination'>,
-  t: number,
-  out: Vector3,
-): Vector3 {
-  const angle = p.phase + (TAU * t) / p.period
-  const x = Math.cos(angle) * p.orbitRadius
-  const z = Math.sin(angle) * p.orbitRadius
-  const y = Math.sin(angle) * p.orbitRadius * Math.sin(p.inclination)
-  return out.set(x, y * 0.35, z)
+/** Fields any orbiting body needs for its Kepler path. */
+export type OrbitSpec = Pick<
+  PlanetSpec,
+  'phase' | 'period' | 'orbitRadius' | 'inclination' | 'eccentricity' | 'periapsis'
+>
+
+/** Body position on its inclined elliptical orbit at galaxy-time t (years).
+    The barycenter sits at the ellipse FOCUS; bodies sweep faster through
+    periapsis, exactly as Kepler demands. */
+export function planetPositionAt(p: OrbitSpec, t: number, out: Vector3): Vector3 {
+  const M = p.phase + (TAU * t) / p.period
+  const pos = keplerPoint(p.orbitRadius, p.eccentricity, p.periapsis, M)
+  // The old circular tilt was y = sin(angle)·r·sin(i)·0.35 — i.e. a shear on
+  // z. Kept identical so the scene's look survives the ellipse upgrade.
+  return out.set(pos.x, pos.z * Math.sin(p.inclination) * 0.35, pos.z)
+}
+
+/** Sampled closed path of an orbit — the single source of truth the orbit
+    LINES draw from, so rings always match where bodies actually fly. */
+export function orbitPathPoints(
+  o: Pick<OrbitSpec, 'orbitRadius' | 'inclination' | 'eccentricity' | 'periapsis'>,
+  segments: number,
+): [number, number, number][] {
+  const points: [number, number, number][] = []
+  const sinIncl = Math.sin(o.inclination)
+  const cos = Math.cos(o.periapsis)
+  const sin = Math.sin(o.periapsis)
+  const b = o.orbitRadius * Math.sqrt(1 - o.eccentricity * o.eccentricity)
+  for (let i = 0; i <= segments; i++) {
+    const E = (i / segments) * TAU
+    const px = o.orbitRadius * (Math.cos(E) - o.eccentricity)
+    const pz = b * Math.sin(E)
+    const x = px * cos - pz * sin
+    const z = px * sin + pz * cos
+    points.push([x, z * sinIncl * 0.35, z])
+  }
+  return points
 }
 
 /** Moon position relative to its planet at wall-clock time t (seconds). */
