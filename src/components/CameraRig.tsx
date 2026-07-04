@@ -3,7 +3,14 @@ import { useFrame } from '@react-three/fiber'
 import { CameraControls } from '@react-three/drei'
 import CameraControlsImpl from 'camera-controls'
 import { Vector3 } from 'three'
-import { SUN_RADIUS, planetPositionAt, type GalaxyLayout } from '../lib/galaxy'
+import {
+  BINARY_EXTENT,
+  C_ORBIT_RADIUS,
+  STARS,
+  planetPositionAt,
+  starPositionAt,
+  type GalaxyLayout,
+} from '../lib/galaxy'
 import { galaxyClock, getPlanetPosition, useGalaxyStore } from '../state/store'
 
 /* Reused scratch vectors — never allocated per frame / per flight. */
@@ -45,8 +52,9 @@ function computeFocusPose(controls: CameraControlsImpl, pos: Vector3, dist: numb
     // Bottom sheet covers ~62vh: aim lower so the subject rises on screen.
     tmpTarget.y -= dist * 0.26
   } else {
-    // Card on the right: aim right of the subject so it settles left-of-center.
-    tmpTarget.addScaledVector(tmpRight, dist * 0.2)
+    // Card on the right: aim right of the subject so its bulk fills the
+    // LEFT half of the frame, hero-shot style.
+    tmpTarget.addScaledVector(tmpRight, dist * 0.26)
   }
 }
 
@@ -56,6 +64,8 @@ export function CameraRig({ layout }: { layout: GalaxyLayout }) {
   const introDone = useGalaxyStore((s) => s.introDone)
   const focus = useGalaxyStore((s) => s.focus)
   const maxR = layout.maxOrbitRadius
+  // Overview flights frame the core system, not the extended-orbit sprawl.
+  const frameR = layout.frameRadius
 
   // Focus-flight bookkeeping: the per-frame pin must wait for the flight to
   // land, or setTarget(..., false) cancels the animated setLookAt mid-air.
@@ -68,8 +78,11 @@ export function CameraRig({ layout }: { layout: GalaxyLayout }) {
   useEffect(() => {
     const controls = controlsRef.current
     if (!controls) return
-    controls.minDistance = 4
-    controls.maxDistance = maxR * 3.6
+    // Keeps an overview dolly from tunneling into the central binary; planet
+    // focus flights lower it on the fly for close-ups.
+    controls.minDistance = BINARY_EXTENT * 1.4
+    // Zoom-out must clear star C's distant loop, not just the planet disc.
+    controls.maxDistance = Math.max(maxR * 3.6, C_ORBIT_RADIUS * 1.6)
     controls.smoothTime = 0.55
     controls.draggingSmoothTime = 0.12
     controls.minPolarAngle = 0.15
@@ -92,16 +105,16 @@ export function CameraRig({ layout }: { layout: GalaxyLayout }) {
     if (!controls) return
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     if (reduceMotion) {
-      void controls.setLookAt(0, maxR * 0.85, maxR * 1.55, 0, 0, 0, false)
+      void controls.setLookAt(0, frameR * 0.4, frameR * 0.72, 0, 0, 0, false)
       useGalaxyStore.getState().setIntroDone()
       return
     }
     controls.enabled = false
-    void controls.setLookAt(0, maxR * 0.85, maxR * 1.55, 0, 0, 0, true).then(() => {
+    void controls.setLookAt(0, frameR * 0.4, frameR * 0.72, 0, 0, 0, true).then(() => {
       controls.enabled = true
       useGalaxyStore.getState().setIntroDone()
     })
-  }, [revealed, maxR])
+  }, [revealed, frameR])
 
   /* ------------------------------------------------------------ */
   /* Focus flights                                                 */
@@ -116,9 +129,18 @@ export function CameraRig({ layout }: { layout: GalaxyLayout }) {
 
     if (focus === null) {
       // Return to the overview pose.
-      flight = controls.setLookAt(0, maxR * 0.85, maxR * 1.55, 0, 0, 0, true)
+      flight = controls.setLookAt(0, frameR * 0.4, frameR * 0.72, 0, 0, 0, true)
     } else if (focus.kind === 'sun') {
-      computeFocusPose(controls, tmpPos.set(0, 0, 0), SUN_RADIUS * 5.2)
+      const star = STARS.find((s) => s.id === focus.star)
+      if (star && star.id === 'C') {
+        // The distant companion lives 45 AU out — fly to IT, not the center.
+        // The galaxy clock freezes while focused, so the pose stays valid.
+        starPositionAt(star, galaxyClock.t, tmpPos)
+        computeFocusPose(controls, tmpPos, star.radius * 5.2)
+      } else {
+        // A and B whirl tightly around the barycenter: frame the pair.
+        computeFocusPose(controls, tmpPos.set(0, 0, 0), BINARY_EXTENT * 4.6)
+      }
       flight = controls.setLookAt(
         tmpEye.x, tmpEye.y, tmpEye.z,
         tmpTarget.x, tmpTarget.y, tmpTarget.z,
@@ -129,8 +151,11 @@ export function CameraRig({ layout }: { layout: GalaxyLayout }) {
       if (!spec) return
       const live = getPlanetPosition(focus.name)
       const pos = live ? tmpPos.copy(live) : planetPositionAt(spec, galaxyClock.t, tmpPos)
+      // Close-ups get under the binary-shell minDistance; restored on return.
+      controls.minDistance = 1.4
+      // Hero shot: ~2.5 radii out, so the planet looms over half the frame.
       // A little more breathing room on phones: the sheet eats 62vh.
-      const dist = Math.max(6.0, spec.size * 5.6) * (isNarrowViewport() ? 1.15 : 1)
+      const dist = Math.max(2.0, spec.size * 2.6) * (isNarrowViewport() ? 1.15 : 1)
       computeFocusPose(controls, pos, dist)
       targetOffsetRef.current.copy(tmpTarget).sub(pos)
       flight = controls.setLookAt(
@@ -142,12 +167,16 @@ export function CameraRig({ layout }: { layout: GalaxyLayout }) {
 
     let cancelled = false
     void flight.then(() => {
-      if (!cancelled) arrivedRef.current = true
+      if (cancelled) return
+      arrivedRef.current = true
+      // Re-arm the binary shell once the camera is far away again — doing it
+      // mid-flight would clamp the animation and pop the camera.
+      if (focus?.kind !== 'planet') controls.minDistance = BINARY_EXTENT * 1.4
     })
     return () => {
       cancelled = true
     }
-  }, [focus, introDone, layout, maxR])
+  }, [focus, introDone, layout, maxR, frameR])
 
   /* ------------------------------------------------------------ */
   /* After the flight lands, pin the target to the planet's live   */

@@ -1,12 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react'
-import {
-  AdditiveBlending,
-  BackSide,
-  Color,
-  DoubleSide,
-  ShaderMaterial,
-  Vector3,
-} from 'three'
+import { AdditiveBlending, DoubleSide, ShaderMaterial, Vector3 } from 'three'
 import type { Group, Mesh } from 'three'
 import { useFrame } from '@react-three/fiber'
 import type { ThreeEvent } from '@react-three/fiber'
@@ -14,11 +7,10 @@ import { Html, useCursor, useTexture } from '@react-three/drei'
 import type { PlanetSpec } from '../lib/galaxy'
 import { moonPositionAt, planetPositionAt } from '../lib/galaxy'
 import {
-  MOON_TEXTURE,
+  MOON_TEXTURES,
   NIGHT_TEXTURE,
   RING_TEXTURE,
   configurePlanetTexture,
-  dayTextureFor,
   makePlanetSurface,
   planetTextureUrl,
 } from '../lib/planetSurface'
@@ -33,28 +25,6 @@ const DRAG_THRESHOLD_PX = 8
 /** Module-level scratch vectors — never allocated in the frame loop. */
 const tmpPlanet = new Vector3()
 const tmpMoon = new Vector3()
-
-/* Fresnel atmosphere shell (shared shader, tinted per planet). */
-const ATMO_VERTEX = /* glsl */ `
-  varying vec3 vNormal;
-  varying vec3 vViewDir;
-  void main() {
-    vNormal = normalize(normalMatrix * normal);
-    vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-    vViewDir = normalize(-mvPosition.xyz);
-    gl_Position = projectionMatrix * mvPosition;
-  }
-`
-const ATMO_FRAGMENT = /* glsl */ `
-  uniform vec3 uColor;
-  uniform float uStrength;
-  varying vec3 vNormal;
-  varying vec3 vViewDir;
-  void main() {
-    float rim = pow(1.0 - abs(dot(normalize(vNormal), normalize(vViewDir))), 2.8);
-    gl_FragColor = vec4(uColor, rim * uStrength);
-  }
-`
 
 /* Planetary ring: Saturn's real ring imagery, sampled radially. The source
    texture is a 2048x125 strip where x runs inner edge -> outer edge. */
@@ -79,7 +49,7 @@ const RING_FRAGMENT = /* glsl */ `
   }
 `
 
-export function Planet({ spec }: { spec: PlanetSpec }) {
+export function Planet({ spec, textureFile }: { spec: PlanetSpec; textureFile: string }) {
   const name = spec.repo.name
   const biome = spec.biome
   const groupRef = useRef<Group>(null)
@@ -101,36 +71,20 @@ export function Planet({ spec }: { spec: PlanetSpec }) {
   useCursor(isHovered)
 
   /* Shared texture cache: every planet reuses the same loaded instances. */
-  const [dayMap, nightMap, moonMap, ringMap] = useTexture(
+  const [dayMap, nightMap, ringMap, ...moonMaps] = useTexture(
     [
-      planetTextureUrl(dayTextureFor(spec)),
+      planetTextureUrl(textureFile),
       planetTextureUrl(NIGHT_TEXTURE),
-      planetTextureUrl(MOON_TEXTURE),
       planetTextureUrl(RING_TEXTURE),
+      ...MOON_TEXTURES.map(planetTextureUrl),
     ],
     configurePlanetTexture,
   )
 
-  /* Textured surface + atmosphere + ring resources. */
+  /* Textured surface + ring resources. */
   const surface = useMemo(
     () => makePlanetSurface(spec, dayMap, nightMap),
     [spec, dayMap, nightMap],
-  )
-  const atmosphere = useMemo(
-    () =>
-      new ShaderMaterial({
-        uniforms: {
-          uColor: { value: new Color(biome.glow) },
-          uStrength: { value: spec.active ? 0.6 : 0.32 },
-        },
-        vertexShader: ATMO_VERTEX,
-        fragmentShader: ATMO_FRAGMENT,
-        blending: AdditiveBlending,
-        transparent: true,
-        depthWrite: false,
-        side: BackSide,
-      }),
-    [biome.glow, spec.active],
   )
   const ringMaterial = useMemo(() => {
     if (!spec.ring) return null
@@ -151,10 +105,9 @@ export function Planet({ spec }: { spec: PlanetSpec }) {
   useEffect(
     () => () => {
       surface.dispose()
-      atmosphere.dispose()
       ringMaterial?.dispose()
     },
-    [surface, atmosphere, ringMaterial],
+    [surface, ringMaterial],
   )
 
   useEffect(() => {
@@ -178,7 +131,6 @@ export function Planet({ spec }: { spec: PlanetSpec }) {
     // Everything else stays alive on wall-clock time while frozen.
     const et = state.clock.getElapsedTime()
     if (bodyRef.current) bodyRef.current.rotation.y = et * spec.spin
-    surface.uniforms.uCameraPos.value.copy(state.camera.position)
 
     for (let i = 0; i < spec.moons.length; i++) {
       const mesh = moonRefs.current[i]
@@ -204,11 +156,6 @@ export function Planet({ spec }: { spec: PlanetSpec }) {
           <sphereGeometry args={[spec.size, 48, 32]} />
         </mesh>
 
-        {/* Fresnel atmosphere. */}
-        <mesh material={atmosphere} scale={1.13} raycast={() => null}>
-          <sphereGeometry args={[spec.size, 32, 24]} />
-        </mesh>
-
         {/* Planetary ring (most-starred repo wears one). */}
         {spec.ring && ringMaterial && (
           <mesh
@@ -222,14 +169,14 @@ export function Planet({ spec }: { spec: PlanetSpec }) {
           </mesh>
         )}
 
-        {/* Additive halo for recently-active repos. */}
+        {/* Faint additive halo so recently-active repos still read from afar. */}
         {spec.active && (
-          <sprite scale={spec.size * 4} raycast={() => null}>
+          <sprite scale={spec.size * 3.2} raycast={() => null}>
             <spriteMaterial
               map={getGlowTexture()}
               color={biome.glow}
               transparent
-              opacity={0.3}
+              opacity={0.16}
               depthWrite={false}
               blending={AdditiveBlending}
             />
@@ -247,7 +194,7 @@ export function Planet({ spec }: { spec: PlanetSpec }) {
           >
             <sphereGeometry args={[moon.size, 16, 12]} />
             <meshStandardMaterial
-              map={moonMap}
+              map={moonMaps[moon.textureIndex]}
               color={moon.kind === 'star' ? STAR_MOON_COLOR : FORK_MOON_COLOR}
               roughness={0.9}
               emissive={moon.kind === 'star' ? STAR_MOON_COLOR : '#000000'}
@@ -257,7 +204,8 @@ export function Planet({ spec }: { spec: PlanetSpec }) {
         ))}
 
         {/* Invisible padded hit target — R3F raycasts invisible meshes. Capped
-            so it can never occlude a neighboring planet's visible body. */}
+            so it can never occlude a neighboring planet's visible body (slot
+            gaps are ≥ 0.5 AU = 7 world units). */}
         <mesh
           visible={false}
           onClick={handleClick}
@@ -267,7 +215,7 @@ export function Planet({ spec }: { spec: PlanetSpec }) {
           }}
           onPointerOut={() => setHovered(null)}
         >
-          <sphereGeometry args={[Math.min(Math.max(spec.size * 1.6, 1.0), 1.2), 12, 12]} />
+          <sphereGeometry args={[Math.min(Math.max(spec.size * 1.8, 1.4), 2.2), 12, 12]} />
         </mesh>
 
         {showLabel && (

@@ -8,7 +8,7 @@ import { Vector3 } from 'three'
  */
 
 export type FocusTarget =
-  | { kind: 'sun' }
+  | { kind: 'sun'; star?: 'A' | 'B' | 'C' }
   | { kind: 'planet'; name: string }
   | null
 
@@ -55,11 +55,12 @@ export const useGalaxyStore = create<GalaxyStore>((set, get) => ({
 /* ---------------------------------------------------------------- */
 
 /**
- * Galaxy clock. `scale` eases to 0 while a planet is focused so orbits freeze
- * and the camera can hold a stable target; the scene root advances `t` each
- * frame by delta * scale.
+ * Galaxy clock, measured in simulated YEARS. `scale` eases to 0 while a
+ * planet is focused so orbits freeze and the camera can hold a stable target;
+ * the scene root advances `t` each frame by delta * scale * yps (when
+ * playing). `yps` (years per second) is the user-facing speed control.
  */
-export const galaxyClock = { t: 0, scale: 1 }
+export const galaxyClock = { t: 0, scale: 1, yps: 0.02, playing: true }
 
 /** World positions of planets, written by Planet meshes each frame. */
 export const planetPositions = new Map<string, Vector3>()

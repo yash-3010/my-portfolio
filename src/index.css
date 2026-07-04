@@ -379,6 +379,100 @@ button {
   color: #fff3c4;
 }
 
+/* telemetry — under the brand, mirrors the reference sim's readout */
+.hud__telemetry {
+  margin-top: 16px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  line-height: 1.7;
+  color: #8b93b8;
+  text-shadow: 0 1px 3px #000;
+}
+
+.telemetry__big {
+  color: #e8ecff;
+  font-size: 13px;
+}
+
+.telemetry__k {
+  color: #5d6580;
+}
+
+.telemetry__counts {
+  margin-top: 4px;
+}
+
+/* sim controls — bottom left, above the seed badge */
+.hud__controls {
+  position: absolute;
+  bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+  left: calc(32px + env(safe-area-inset-left, 0px));
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  pointer-events: auto;
+}
+
+.hud__controls button {
+  font: inherit;
+  font-size: 12px;
+  color: #c3cae8;
+  background: rgba(13, 18, 34, 0.85);
+  border: 1px solid rgba(150, 170, 220, 0.16);
+  border-radius: 8px;
+  padding: 6px 11px;
+  cursor: pointer;
+  transition: border-color 150ms ease, color 150ms ease;
+}
+
+.hud__controls button:hover {
+  border-color: rgba(73, 212, 206, 0.5);
+  color: #e8ecff;
+}
+
+.controls__slider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  color: #8b93b8;
+}
+
+.controls__slider input[type='range'] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 110px;
+  height: 3px;
+  border-radius: 3px;
+  background: #26304a;
+  outline: none;
+  cursor: pointer;
+}
+
+.controls__slider input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: #49d4ce;
+  border: 0;
+}
+
+.controls__slider input[type='range']::-moz-range-thumb {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: #49d4ce;
+  border: 0;
+}
+
+.controls__value {
+  min-width: 42px;
+  color: #c3cae8;
+}
+
 /* credit link — bottom right */
 .hud__credit {
   position: absolute;
@@ -407,6 +501,7 @@ button {
 .hud__legend,
 .hud__hint,
 .hud__seed,
+.hud__controls,
 .hud__credit {
   transition: opacity 300ms ease, visibility 0s 0s;
 }
@@ -414,6 +509,7 @@ button {
 .hud--focused .hud__legend,
 .hud--focused .hud__hint,
 .hud--focused .hud__seed,
+.hud--focused .hud__controls,
 .hud--focused .hud__credit {
   opacity: 0 !important;
   visibility: hidden;
@@ -801,6 +897,12 @@ button {
     left: calc(20px + env(safe-area-inset-left, 0px));
     bottom: calc(16px + env(safe-area-inset-bottom, 0px));
     max-width: 88vw;
+  }
+
+  /* Telemetry + sim controls are desktop chrome — phones keep the sky clear. */
+  .hud__telemetry,
+  .hud__controls {
+    display: none;
   }
 
   .hud__credit {
