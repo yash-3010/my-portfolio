@@ -10,15 +10,24 @@ import {
 import type { Group, Mesh } from 'three'
 import { useFrame } from '@react-three/fiber'
 import type { ThreeEvent } from '@react-three/fiber'
-import { Html, useCursor } from '@react-three/drei'
+import { Html, useCursor, useTexture } from '@react-three/drei'
 import type { PlanetSpec } from '../lib/galaxy'
 import { moonPositionAt, planetPositionAt } from '../lib/galaxy'
-import { makePlanetSurface } from '../lib/planetSurface'
+import {
+  MOON_TEXTURE,
+  NIGHT_TEXTURE,
+  RING_TEXTURE,
+  configurePlanetTexture,
+  dayTextureFor,
+  makePlanetSurface,
+  planetTextureUrl,
+} from '../lib/planetSurface'
 import { galaxyClock, planetPositions, useGalaxyStore } from '../state/store'
 import { getGlowTexture } from './Sun'
 
 const STAR_MOON_COLOR = '#ffe9b8'
-const FORK_MOON_COLOR = '#9aa3b2'
+/* Near-white: it tints the real lunar texture, no longer a flat color. */
+const FORK_MOON_COLOR = '#cdd2da'
 const DRAG_THRESHOLD_PX = 8
 
 /** Module-level scratch vectors — never allocated in the frame loop. */
@@ -47,7 +56,8 @@ const ATMO_FRAGMENT = /* glsl */ `
   }
 `
 
-/* Planetary ring: banded annulus with a Cassini-style gap, seeded per repo. */
+/* Planetary ring: Saturn's real ring imagery, sampled radially. The source
+   texture is a 2048x125 strip where x runs inner edge -> outer edge. */
 const RING_VERTEX = /* glsl */ `
   varying vec2 vLocal;
   void main() {
@@ -56,27 +66,16 @@ const RING_VERTEX = /* glsl */ `
   }
 `
 const RING_FRAGMENT = /* glsl */ `
-  uniform vec3 uColor;
+  uniform sampler2D uMap;
   uniform float uInner;
   uniform float uOuter;
-  uniform float uSeed;
   varying vec2 vLocal;
   void main() {
     float r = length(vLocal);
     float t = (r - uInner) / (uOuter - uInner);
     if (t < 0.0 || t > 1.0) discard;
-    // Layered radial banding, phase-shifted by the repo seed.
-    float bands = 0.55
-      + 0.25 * sin(t * 40.0 + uSeed * 17.0)
-      + 0.20 * sin(t * 87.0 + uSeed * 5.0);
-    bands = clamp(bands, 0.15, 1.0);
-    // One clean division gap partway out.
-    float gapPos = 0.55 + fract(uSeed * 3.7) * 0.2;
-    float gap = 0.15 + 0.85 * smoothstep(0.015, 0.05, abs(t - gapPos));
-    // Feathered inner/outer edges.
-    float edge = smoothstep(0.0, 0.12, t) * (1.0 - smoothstep(0.8, 1.0, t));
-    float alpha = bands * gap * edge * 0.55;
-    gl_FragColor = vec4(uColor * (0.55 + 0.45 * bands), alpha);
+    vec4 tex = texture2D(uMap, vec2(t, 0.5));
+    gl_FragColor = vec4(tex.rgb, tex.a * 0.9);
   }
 `
 
@@ -101,8 +100,22 @@ export function Planet({ spec }: { spec: PlanetSpec }) {
   const showLabel = (isHovered || spec.highlight) && !isFocused
   useCursor(isHovered)
 
-  /* Procedural surface + atmosphere + trail resources. */
-  const surface = useMemo(() => makePlanetSurface(spec), [spec])
+  /* Shared texture cache: every planet reuses the same loaded instances. */
+  const [dayMap, nightMap, moonMap, ringMap] = useTexture(
+    [
+      planetTextureUrl(dayTextureFor(spec)),
+      planetTextureUrl(NIGHT_TEXTURE),
+      planetTextureUrl(MOON_TEXTURE),
+      planetTextureUrl(RING_TEXTURE),
+    ],
+    configurePlanetTexture,
+  )
+
+  /* Textured surface + atmosphere + ring resources. */
+  const surface = useMemo(
+    () => makePlanetSurface(spec, dayMap, nightMap),
+    [spec, dayMap, nightMap],
+  )
   const atmosphere = useMemo(
     () =>
       new ShaderMaterial({
@@ -121,14 +134,11 @@ export function Planet({ spec }: { spec: PlanetSpec }) {
   )
   const ringMaterial = useMemo(() => {
     if (!spec.ring) return null
-    // Pale icy dust, faintly tinted toward the biome glow.
-    const color = new Color('#cdd6e4').lerp(new Color(biome.glow), 0.3)
     return new ShaderMaterial({
       uniforms: {
-        uColor: { value: color },
+        uMap: { value: ringMap },
         uInner: { value: spec.ring.inner * spec.size },
         uOuter: { value: spec.ring.outer * spec.size },
-        uSeed: { value: spec.seed },
       },
       vertexShader: RING_VERTEX,
       fragmentShader: RING_FRAGMENT,
@@ -136,7 +146,7 @@ export function Planet({ spec }: { spec: PlanetSpec }) {
       depthWrite: false,
       side: DoubleSide,
     })
-  }, [spec, biome.glow])
+  }, [spec, ringMap])
 
   useEffect(
     () => () => {
@@ -168,7 +178,6 @@ export function Planet({ spec }: { spec: PlanetSpec }) {
     // Everything else stays alive on wall-clock time while frozen.
     const et = state.clock.getElapsedTime()
     if (bodyRef.current) bodyRef.current.rotation.y = et * spec.spin
-    surface.uniforms.uTime.value = et
     surface.uniforms.uCameraPos.value.copy(state.camera.position)
 
     for (let i = 0; i < spec.moons.length; i++) {
@@ -190,7 +199,7 @@ export function Planet({ spec }: { spec: PlanetSpec }) {
   return (
     <>
       <group ref={groupRef} name={`planet-${name}`}>
-        {/* The planet: custom-lit procedural surface. */}
+        {/* The planet: real imagery, custom-lit from the sun at the origin. */}
         <mesh ref={bodyRef} material={surface}>
           <sphereGeometry args={[spec.size, 48, 32]} />
         </mesh>
@@ -227,7 +236,7 @@ export function Planet({ spec }: { spec: PlanetSpec }) {
           </sprite>
         )}
 
-        {/* Moons: stars are pale gold specks, forks are grey rocks. */}
+        {/* Moons: real lunar imagery — stars tinted warm gold, forks plain rock. */}
         {spec.moons.map((moon, i) => (
           <mesh
             key={i}
@@ -238,10 +247,11 @@ export function Planet({ spec }: { spec: PlanetSpec }) {
           >
             <sphereGeometry args={[moon.size, 16, 12]} />
             <meshStandardMaterial
+              map={moonMap}
               color={moon.kind === 'star' ? STAR_MOON_COLOR : FORK_MOON_COLOR}
               roughness={0.9}
               emissive={moon.kind === 'star' ? STAR_MOON_COLOR : '#000000'}
-              emissiveIntensity={moon.kind === 'star' ? 0.45 : 0}
+              emissiveIntensity={moon.kind === 'star' ? 0.22 : 0}
             />
           </mesh>
         ))}

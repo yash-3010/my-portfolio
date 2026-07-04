@@ -9,10 +9,15 @@ import {
 import type { Mesh, SpriteMaterial } from 'three'
 import { useFrame } from '@react-three/fiber'
 import type { ThreeEvent } from '@react-three/fiber'
-import { useCursor } from '@react-three/drei'
+import { useCursor, useTexture } from '@react-three/drei'
 import type { GalaxyUser } from '../types'
 import { SUN } from '../lib/palette'
 import { SUN_RADIUS } from '../lib/galaxy'
+import {
+  SUN_TEXTURE,
+  configurePlanetTexture,
+  planetTextureUrl,
+} from '../lib/planetSurface'
 import { useGalaxyStore } from '../state/store'
 
 /* ---------------------------------------------------------------- */
@@ -79,6 +84,8 @@ export function Sun({ user }: { user: GalaxyUser }) {
   const setFocus = useGalaxyStore((s) => s.setFocus)
   useCursor(hovered)
 
+  const sunMap = useTexture(planetTextureUrl(SUN_TEXTURE), configurePlanetTexture)
+
   const atmosphereMaterial = useMemo(
     () =>
       new ShaderMaterial({
@@ -127,16 +134,11 @@ export function Sun({ user }: { user: GalaxyUser }) {
         }}
         onPointerOut={() => setHovered(false)}
       >
-        <icosahedronGeometry args={[SUN_RADIUS, 2]} />
-        {/* Emissive pushed past the bloom threshold: the composer supplies the
-            light bleed, the facets keep visible tonal variation. */}
-        <meshStandardMaterial
-          color="#ffb45e"
-          emissive={SUN.core}
-          emissiveIntensity={1.15}
-          flatShading
-          roughness={0.6}
-        />
+        <sphereGeometry args={[SUN_RADIUS, 48, 32]} />
+        {/* Real photosphere imagery, unlit and boosted past the bloom
+            threshold: the composer supplies the light bleed, the granulation
+            in the texture keeps visible tonal variation. */}
+        <meshBasicMaterial map={sunMap} color={[1.55, 1.3, 1.05]} />
       </mesh>
 
       {/* Fresnel rim shell. */}
