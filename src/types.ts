@@ -30,6 +30,11 @@ export interface GalaxyRepo {
   createdAt: string
   /** First meaningful paragraph of the README, markdown stripped. */
   readmeSummary: string | null
+  /* -- Manual entries only (src/data/manual-repos.json), never from the API -- */
+  /** Pin the planet to a fixed orbit (AU) instead of recency slotting. */
+  pinSlotAU?: number
+  /** Force a specific body texture (e.g. Saturn / Jupiter for the giants). */
+  pinTexture?: string
 }
 
 export interface ContributionDay {

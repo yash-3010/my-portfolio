@@ -11,15 +11,16 @@ import data from './data/github.json'
 import manualRepos from './data/manual-repos.json'
 
 /** Cast once — the JSON import gives wide types. Manual repos (work projects
-    the API can't see) ride along; the fetch script never touches that file. */
+    the API can't see) ride along; the fetch script never touches that file.
+    On a name collision the MANUAL entry wins — public shells of private
+    projects (e.g. the incomplete pvcon-website copy) get replaced. */
 const fetched = data as GalaxyData
+const manual = manualRepos as GalaxyData['repos']
 const galaxyData: GalaxyData = {
   ...fetched,
   repos: [
-    ...fetched.repos,
-    ...(manualRepos as GalaxyData['repos']).filter(
-      (m) => !fetched.repos.some((r) => r.name === m.name),
-    ),
+    ...fetched.repos.filter((r) => !manual.some((m) => m.name === r.name)),
+    ...manual,
   ],
 }
 

@@ -235,11 +235,11 @@ const ACTIVE_WINDOW_DAYS = 60
 const SYSTEM_PLANET_COUNT = 10
 
 export const HIGHLIGHT_REPOS = new Set([
-  'my-file-crypto',
-  'pdf-modifier',
-  'tinypixels',
-  'langchain-learn',
+  'psmf-manager',
+  'office-to-pdf',
+  'psmf-manager-website',
   'pvcon-website',
+  'pdf-modifier',
 ])
 
 /* ---------------------------------------------------------------- */
@@ -344,10 +344,12 @@ export function buildGalaxy(data: GalaxyData): GalaxyLayout {
   // The most-starred repo wears the ring (Saturn of the system).
   const maxStars = Math.max(0, ...repos.map((r) => r.stars))
 
-  // Recency rank drives the orbit slot: most recently pushed = innermost.
-  const byRecency = [...repos].sort(
-    (a, b) => new Date(b.pushedAt).getTime() - new Date(a.pushedAt).getTime(),
-  )
+  // Pinned repos (manual entries) claim fixed orbits; everyone else takes
+  // recency-ranked slots AFTER the pinned count, so nothing collides.
+  const pinnedCount = repos.filter((r) => r.pinSlotAU != null).length
+  const byRecency = [...repos]
+    .filter((r) => r.pinSlotAU == null)
+    .sort((a, b) => new Date(b.pushedAt).getTime() - new Date(a.pushedAt).getTime())
   const orbitRank = new Map(byRecency.map((r, i) => [r.name, i]))
 
   const grouped = new Set<ConstellationId>()
@@ -358,8 +360,10 @@ export function buildGalaxy(data: GalaxyData): GalaxyLayout {
     const meta = CONSTELLATIONS[constellation]
     const seedHash = hashString(repo.name)
     const rand = rng(seedHash)
-    const rank = orbitRank.get(repo.name)!
-    const slot = slotFor(rank)
+    const slot =
+      repo.pinSlotAU != null
+        ? { a: repo.pinSlotAU, per: circumbinaryPeriod(repo.pinSlotAU) }
+        : slotFor(pinnedCount + orbitRank.get(repo.name)!)
     const sizeT = Math.sqrt(repo.commits / maxCommits)
     // Start inside the repo's constellation sector; Kepler shear spreads the
     // system out over time the way the reference does.
