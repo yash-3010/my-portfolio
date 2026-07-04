@@ -319,12 +319,26 @@ button {
   background: rgba(150, 170, 255, 0.14);
 }
 
-.legend__caption {
-  margin: 12px 0 0;
+.legend__key {
+  margin: 0;
+  padding: 0;
+  list-style: none;
   font-size: 10.5px;
-  line-height: 1.6;
+  line-height: 1.7;
   color: #8b93b8;
   letter-spacing: 0.02em;
+}
+
+.legend__key li {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+}
+
+.legend__key li::before {
+  content: '·';
+  color: #5d6580;
+  font-weight: 700;
 }
 
 /* hint pill — bottom center */
