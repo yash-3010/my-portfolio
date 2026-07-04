@@ -9,7 +9,7 @@
     "topics": ["rails", "react", "gxp", "pharmacovigilance", "saas"],
     "stars": 1,
     "forks": 6,
-    "commits": 600,
+    "commits": 1105,
     "openIssues": 0,
     "pushedAt": "2026-07-01T00:00:00Z",
     "createdAt": "2024-01-15T00:00:00Z",
@@ -33,7 +33,7 @@
     "createdAt": "2025-02-01T00:00:00Z",
     "readmeSummary": "Dockerized conversion service (Ubuntu + LibreOffice) with an authenticated /convert endpoint for Word/Excel to PDF and a /compare endpoint for side-by-side or overlay PDF diffs, deployed on AWS ECS via ECR.",
     "pinSlotAU": 3.4,
-    "pinTexture": "2k_jupiter.jpg"
+    "pinTexture": "2k_makemake_fictional.jpg"
   },
   {
     "name": "psmf-manager-website",

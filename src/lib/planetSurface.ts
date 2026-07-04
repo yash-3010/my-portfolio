@@ -38,12 +38,19 @@ export function assignPlanetTextures(planets: PlanetSpec[]): Map<string, string>
   const uses = new Map(TEXTURE_POOL.map((f) => [f, 0]))
   const assigned = new Map<string, string>()
   const ordered = [...planets].sort((a, b) => (a.repo.name < b.repo.name ? -1 : 1))
+
+  // Pass 1: pinned bodies claim their look first, so no ordinary repo can
+  // twin a flagship (their pick counts as used if it lives in the pool).
   for (const p of ordered) {
-    // Manual entries can dictate their body (Saturn / Jupiter giants).
-    if (p.repo.pinTexture) {
-      assigned.set(p.repo.name, p.repo.pinTexture)
-      continue
-    }
+    if (!p.repo.pinTexture) continue
+    assigned.set(p.repo.name, p.repo.pinTexture)
+    const used = uses.get(p.repo.pinTexture)
+    if (used !== undefined) uses.set(p.repo.pinTexture, used + 1)
+  }
+
+  // Pass 2: everyone else — ringed wears Saturn, the rest deal by affinity.
+  for (const p of ordered) {
+    if (assigned.has(p.repo.name)) continue
     if (p.ring) {
       assigned.set(p.repo.name, SATURN_TEXTURE)
       continue
@@ -66,9 +73,9 @@ export const MOON_TEXTURES = [
   '2k_eris_fictional.jpg',
   '2k_haumea_fictional.jpg',
 ]
-/** Dwarf-planet imagery for the unclickable filler worlds (eris/haumea
-    belong to the moons, ceres/makemake double as planet-pool textures). */
-export const DWARF_TEXTURES = ['2k_ceres_fictional.jpg', '2k_makemake_fictional.jpg']
+/** Dwarf-planet imagery for the unclickable filler worlds (makemake is
+    office-to-pdf's body now, so dwarfs stick to ceres/haumea). */
+export const DWARF_TEXTURES = ['2k_ceres_fictional.jpg', '2k_haumea_fictional.jpg']
 
 export function planetTextureUrl(file: string): string {
   return `${import.meta.env.BASE_URL}assets/planets/${file}`
