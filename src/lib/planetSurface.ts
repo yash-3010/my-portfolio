@@ -39,6 +39,11 @@ export function assignPlanetTextures(planets: PlanetSpec[]): Map<string, string>
   const assigned = new Map<string, string>()
   const ordered = [...planets].sort((a, b) => (a.repo.name < b.repo.name ? -1 : 1))
   for (const p of ordered) {
+    // Manual entries can dictate their body (Saturn / Jupiter giants).
+    if (p.repo.pinTexture) {
+      assigned.set(p.repo.name, p.repo.pinTexture)
+      continue
+    }
     if (p.ring) {
       assigned.set(p.repo.name, SATURN_TEXTURE)
       continue
