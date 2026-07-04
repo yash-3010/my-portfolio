@@ -12,7 +12,8 @@ hand-placed — it is all derived from live GitHub data:
 | Orbit distance | Recency — recently pushed repos orbit closer to the sun |
 | Glow + pulse | Pushed within the last 60 days |
 | Moons | Stars and forks |
-| Planet surface | Real solar-system imagery mapped by language — TypeScript repos are blue marbles (Earth), JavaScript repos banded gas giants (Jupiter), Python repos pale ice giants (Uranus), … — sun-lit with a true day/night terminator; active repos glow with Earth's real city lights on the night side |
+| Planet surface | Real solar-system imagery — every repo is dealt its own body (biased toward its language's palette: TypeScript→Earth, JavaScript→Jupiter, Python→Uranus, …), sun-lit with a true day/night terminator; active repos glow with Earth's real city lights on the night side; the ringed repo is Saturn |
+| Asteroid belt | One rock per all-time commit, riding the frost line between the rocky worlds and the giants |
 | Constellations | Repos clustered by interest: **Web**, **AI / ML**, **Dev Tools** |
 | Planetary ring | The most-starred repo wears a banded ring |
 
@@ -26,6 +27,10 @@ ESO/S. Brunier, CC-BY 4.0.
 Planet, moon, ring, and sun surface textures (`public/assets/planets/`) are
 from [Solar System Scope](https://www.solarsystemscope.com/textures/) —
 credit: INOVE, CC-BY 4.0.
+
+The asteroid belt instances the
+[Asteroids Pack (metallic version)](https://sketchfab.com/3d-models/asteroids-pack-metallic-version)
+by Sebastian Sosnowski — CC Attribution.
 
 Click (or tap) a planet and the camera flies in; a card shows the repo's
 README summary, tech stack, stats, and links. Click the sun for the about-me
