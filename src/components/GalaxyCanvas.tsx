@@ -149,10 +149,13 @@ export function GalaxyCanvas({ data, layout }: { data: GalaxyData; layout: Galax
         <ClockTicker />
         <ReadySignal />
         <TelemetryProbe />
+        {/* Outside the Suspense boundary ON PURPOSE: it loads via its own
+            (non-suspending) loader, and inside the boundary React would defer
+            mounting it until every suspended sibling resolved — making the
+            biggest asset start LAST. Radius beyond controls.maxDistance and
+            star C's orbit so the camera and stars stay inside the sphere. */}
+        <Skybox radius={maxR * 6} />
         <Suspense fallback={null}>
-          {/* Beyond controls.maxDistance (3.6·maxR) and star C's orbit so the
-              camera and all three stars always stay inside the sphere. */}
-          <Skybox radius={maxR * 6} />
           <Sun user={data.user} />
           {layout.planets.map((spec) => (
             <Planet
