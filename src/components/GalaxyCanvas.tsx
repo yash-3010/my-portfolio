@@ -1,5 +1,6 @@
 import { Suspense, useEffect, useMemo, useRef } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
+import { useProgress } from '@react-three/drei'
 import { Bloom, EffectComposer, Vignette } from '@react-three/postprocessing'
 import type { PerspectiveCamera } from 'three'
 import type { GalaxyData } from '../types'
@@ -25,6 +26,44 @@ function ClockTicker() {
     galaxyClock.scale += (target - galaxyClock.scale) * Math.min(1, delta * 3)
     if (galaxyClock.playing) {
       galaxyClock.t += delta * galaxyClock.scale * galaxyClock.yps
+    }
+  })
+  return null
+}
+
+/**
+ * Signals `ready` (the loading screen's gate) only once EVERY asset —
+ * planet/sun textures, the asteroid GLB, the skybox — has come through
+ * three's DefaultLoadingManager AND a few frames have painted afterward,
+ * so GPU texture uploads and shader compiles are also behind the loader.
+ * A timeout backstop keeps a broken asset from trapping the loader forever.
+ */
+const READY_SETTLE_FRAMES = 4
+const READY_TIMEOUT_MS = 15_000
+
+function ReadySignal() {
+  const { active } = useProgress()
+  const startedRef = useRef(false)
+  const settledFrames = useRef(0)
+  if (active) startedRef.current = true
+
+  useEffect(() => {
+    const timer = window.setTimeout(
+      () => useGalaxyStore.getState().setReady(),
+      READY_TIMEOUT_MS,
+    )
+    return () => window.clearTimeout(timer)
+  }, [])
+
+  useFrame(() => {
+    if (useGalaxyStore.getState().ready) return
+    if (!startedRef.current || active) {
+      settledFrames.current = 0
+      return
+    }
+    settledFrames.current += 1
+    if (settledFrames.current >= READY_SETTLE_FRAMES) {
+      useGalaxyStore.getState().setReady()
     }
   })
   return null
@@ -95,10 +134,6 @@ export function GalaxyCanvas({ data, layout }: { data: GalaxyData; layout: Galax
           position: [0, layout.frameRadius * 1.3, layout.frameRadius * 1.7],
         }}
         gl={{ antialias: true, powerPreference: 'high-performance' }}
-        onCreated={() => {
-          // Signal readiness once the first frame has actually painted.
-          requestAnimationFrame(() => useGalaxyStore.getState().setReady())
-        }}
         onPointerMissed={(e) => {
           // Only treat it as a "click on empty space" if the pointer barely
           // moved — releasing an orbit drag must not close the card.
@@ -112,6 +147,7 @@ export function GalaxyCanvas({ data, layout }: { data: GalaxyData; layout: Galax
         <fog attach="fog" args={['#050510', maxR * 2.2, maxR * 8]} />
         <ambientLight intensity={0.22} />
         <ClockTicker />
+        <ReadySignal />
         <TelemetryProbe />
         <Suspense fallback={null}>
           {/* Beyond controls.maxDistance (3.6·maxR) and star C's orbit so the

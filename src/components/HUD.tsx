@@ -173,11 +173,15 @@ export function HUD({ data, layout }: { data: GalaxyData; layout: GalaxyLayout }
             {b.language}
           </div>
         ))}
-        <p className="legend__caption">
-          planet size = commits · orbit = recency · moons = stars &amp; forks
-          · belt = 1 asteroid per commit
-          {hasRing && ' · ring = most-starred repo'}
-        </p>
+        <div className="legend__divider" />
+        <div className="legend__label">how to read it</div>
+        <ul className="legend__key">
+          <li>planet size = commits</li>
+          <li>orbit = recency</li>
+          <li>moons = stars &amp; forks</li>
+          <li>belt = 1 asteroid per commit</li>
+          {hasRing && <li>ring = most-starred repo</li>}
+        </ul>
       </motion.aside>
 
       {/* Bottom-center control hint — shown until the first focus ever */}
