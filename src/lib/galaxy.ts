@@ -71,9 +71,10 @@ function eccentricAnomaly(M: number, e: number): number {
 
 /** Planar position on an ellipse whose FOCUS sits at the origin — semi-major
     axis a, eccentricity e, periapsis argument ω, mean anomaly M. True Kepler
-    timing: bodies sweep faster through periapsis. Writes {x, z} into out. */
+    timing: bodies sweep faster through periapsis. Returns a SHARED scratch
+    object — consume x/z before the next call (frame loops only). */
 const keplerXZ = { x: 0, z: 0 }
-function keplerPoint(a: number, e: number, omega: number, M: number): { x: number; z: number } {
+export function keplerPoint(a: number, e: number, omega: number, M: number): { x: number; z: number } {
   const E = eccentricAnomaly(M, e)
   const px = a * (Math.cos(E) - e)
   const pz = a * Math.sqrt(1 - e * e) * Math.sin(E)

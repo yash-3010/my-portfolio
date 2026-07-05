@@ -8,7 +8,7 @@ import type {
 } from 'three'
 import { useFrame } from '@react-three/fiber'
 import { useGLTF } from '@react-three/drei'
-import { AU, BELT, circumbinaryPeriod, seededRng } from '../lib/galaxy'
+import { AU, BELT, circumbinaryPeriod, keplerPoint, seededRng } from '../lib/galaxy'
 import { galaxyClock } from '../state/store'
 
 /**
@@ -40,13 +40,16 @@ interface InstanceSet {
   geometry: BufferGeometry
   material: MeshStandardMaterial
   count: number
-  /** Per-rock orbit state, all seeded once. */
+  /** Per-rock orbit state, all seeded once. radius = semi-major axis. */
   radius: Float32Array
   phase: Float32Array
   height: Float32Array
   size: Float32Array
-  /** Angular rate, radians per simulated year (Kepler per rock). */
+  /** Mean motion, radians per simulated year (Kepler per rock). */
   rate: Float32Array
+  /** Per-rock ellipse: eccentricity + argument of periapsis. */
+  ecc: Float32Array
+  peri: Float32Array
   quaternions: Quaternion[]
 }
 
@@ -106,6 +109,8 @@ export function AsteroidBelt({ total }: { total: number }) {
       const height = new Float32Array(count)
       const size = new Float32Array(count)
       const rate = new Float32Array(count)
+      const ecc = new Float32Array(count)
+      const peri = new Float32Array(count)
       const quaternions: Quaternion[] = []
       for (let i = 0; i < count; i++) {
         radius[i] = BELT.inner + (BELT.outer - BELT.inner) * rand()
@@ -117,8 +122,12 @@ export function AsteroidBelt({ total }: { total: number }) {
         quaternions.push(new Quaternion().setFromEuler(e))
         // Kepler per rock: inner rocks orbit faster than outer ones.
         rate[i] = TAU / circumbinaryPeriod(radius[i] / AU)
+        // Real belts straggle: gentle per-rock ellipses feather the ring's
+        // edges without diving into the neighboring planet slots.
+        ecc[i] = 0.02 + rand() * 0.1
+        peri[i] = rand() * TAU
       }
-      return { ...variant, count, radius, phase, height, size, rate, quaternions }
+      return { ...variant, count, radius, phase, height, size, rate, ecc, peri, quaternions }
     })
   }, [variants, total])
 
@@ -133,12 +142,11 @@ export function AsteroidBelt({ total }: { total: number }) {
       const set = instanceSets[vi]
       if (!mesh) continue
       for (let i = 0; i < set.count; i++) {
-        const angle = set.phase[i] + set.rate[i] * t
-        tmpPos.set(
-          Math.cos(angle) * set.radius[i],
-          set.height[i],
-          Math.sin(angle) * set.radius[i],
-        )
+        // Full Kepler per rock: mean anomaly -> ellipse with the barycenter
+        // at the focus, same math the planets fly.
+        const M = set.phase[i] + set.rate[i] * t
+        const p = keplerPoint(set.radius[i], set.ecc[i], set.peri[i], M)
+        tmpPos.set(p.x, set.height[i], p.z)
         tmpScale.setScalar(set.size[i])
         tmpMatrix.compose(tmpPos, set.quaternions[i], tmpScale)
         mesh.setMatrixAt(i, tmpMatrix)
