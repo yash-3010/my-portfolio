@@ -43,11 +43,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # github.event.repository is empty on schedule events, so derive the
-      # base path from GITHUB_REPOSITORY (present for every trigger).
+      # The site lives at the custom domain root (yashbarman.space), so
+      # assets resolve from /. If the domain is ever dropped, revert to
+      # DEPLOY_BASE="/${GITHUB_REPOSITORY#*/}/" for the github.io path.
       - name: Build
         run: |
-          export DEPLOY_BASE="/${GITHUB_REPOSITORY#*/}/"
+          export DEPLOY_BASE="/"
           echo "Building with DEPLOY_BASE=$DEPLOY_BASE"
           npm run build
 

@@ -81,9 +81,12 @@ the existing snapshot, so CI builds always succeed.
 snapshot with the Actions `GITHUB_TOKEN` first. Enable it under
 *Settings → Pages → Source: GitHub Actions*.
 
+**Custom domain** — the site lives at [yashbarman.space](https://yashbarman.space)
+(configured under *Settings → Pages → Custom domain*), so the workflow builds
+with `DEPLOY_BASE=/`.
+
 **Vercel / Netlify** — build command `npm run fetch:github && npm run build`,
-output `dist/`. Leave `DEPLOY_BASE` unset (it defaults to `/`; the Pages
-workflow sets it to `/my-portfolio/`).
+output `dist/`. Leave `DEPLOY_BASE` unset (it defaults to `/`).
 
 ## Project layout
 
