@@ -33,29 +33,40 @@ const APPROACH_LIFT = 0.35
 /*   DISTANCE  horizontal pull-back, as a fraction of the frame radius.*/
 /* ------------------------------------------------------------------ */
 const OVERVIEW_AZIMUTH = 3.4
-const OVERVIEW_ELEVATION = 0.15
-const OVERVIEW_DISTANCE = 0.6
+const OVERVIEW_ELEVATION = 0.08
+const OVERVIEW_DISTANCE = 0.34
+
+function isNarrowViewport(): boolean {
+  return window.matchMedia('(max-width: 720px)').matches
+}
+
+/** Portrait phones see roughly HALF the horizontal FOV of a desktop window:
+    the same pose overflows sideways, and a near-flat elevation smears the
+    orbit lines into stripes across the screen. Pull back and lift instead. */
+const NARROW_DISTANCE_FACTOR = 2.6
+const NARROW_ELEVATION = 0.45
 
 function overviewEye(frameR: number): Vector3 {
+  const narrow = isNarrowViewport()
+  const dist = frameR * OVERVIEW_DISTANCE * (narrow ? NARROW_DISTANCE_FACTOR : 1)
+  const elevation = frameR * (narrow ? NARROW_ELEVATION : OVERVIEW_ELEVATION)
   return tmpEye.set(
-    Math.sin(OVERVIEW_AZIMUTH) * frameR * OVERVIEW_DISTANCE,
-    frameR * OVERVIEW_ELEVATION,
-    Math.cos(OVERVIEW_AZIMUTH) * frameR * OVERVIEW_DISTANCE,
+    Math.sin(OVERVIEW_AZIMUTH) * dist,
+    elevation,
+    Math.cos(OVERVIEW_AZIMUTH) * dist,
   )
 }
 
 /** Where the camera waits before the intro dolly — same azimuth as the
     overview pose, pulled way back, so the flight is a clean descent. */
 export function introStartPosition(frameR: number): [number, number, number] {
+  const narrow = isNarrowViewport()
+  const dist = frameR * 1.7 * (narrow ? NARROW_DISTANCE_FACTOR : 1)
   return [
-    Math.sin(OVERVIEW_AZIMUTH) * frameR * 1.7,
-    frameR * 1.3,
-    Math.cos(OVERVIEW_AZIMUTH) * frameR * 1.7,
+    Math.sin(OVERVIEW_AZIMUTH) * dist,
+    frameR * 1.3 * (narrow ? 1.4 : 1),
+    Math.cos(OVERVIEW_AZIMUTH) * dist,
   ]
-}
-
-function isNarrowViewport(): boolean {
-  return window.matchMedia('(max-width: 720px)').matches
 }
 
 /**
@@ -167,10 +178,12 @@ export function CameraRig({ layout }: { layout: GalaxyLayout }) {
         // The distant companion lives 45 AU out — fly to IT, not the center.
         // The galaxy clock freezes while focused, so the pose stays valid.
         starPositionAt(star, galaxyClock.t, tmpPos)
-        computeFocusPose(controls, tmpPos, star.radius * 5.2)
+        computeFocusPose(controls, tmpPos, star.radius * 5.2 * (isNarrowViewport() ? 1.5 : 1))
       } else {
         // A and B whirl tightly around the barycenter: frame the pair.
-        computeFocusPose(controls, tmpPos.set(0, 0, 0), BINARY_EXTENT * 4.6)
+        // Narrow screens need extra room or the pair crops at the edges.
+        const dist = BINARY_EXTENT * 4.6 * (isNarrowViewport() ? 1.5 : 1)
+        computeFocusPose(controls, tmpPos.set(0, 0, 0), dist)
       }
       flight = controls.setLookAt(
         tmpEye.x, tmpEye.y, tmpEye.z,
@@ -185,8 +198,9 @@ export function CameraRig({ layout }: { layout: GalaxyLayout }) {
       // Close-ups get under the binary-shell minDistance; restored on return.
       controls.minDistance = 1.4
       // Hero shot: ~2.5 radii out, so the planet looms over half the frame.
-      // A little more breathing room on phones: the sheet eats 62vh.
-      const dist = Math.max(2.0, spec.size * 2.6) * (isNarrowViewport() ? 1.15 : 1)
+      // Phones need real breathing room: the sheet eats 62vh and the narrow
+      // FOV crops the sphere past the screen edges otherwise.
+      const dist = Math.max(2.0, spec.size * 2.6) * (isNarrowViewport() ? 1.7 : 1)
       computeFocusPose(controls, pos, dist)
       targetOffsetRef.current.copy(tmpTarget).sub(pos)
       flight = controls.setLookAt(
