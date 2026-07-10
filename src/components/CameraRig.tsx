@@ -190,6 +190,9 @@ export function CameraRig({ layout }: { layout: GalaxyLayout }) {
         tmpTarget.x, tmpTarget.y, tmpTarget.z,
         true,
       )
+    } else if (focus.kind !== 'planet') {
+      // 'wall' focus is a realm-only mode; the galaxy camera ignores it.
+      return
     } else {
       const spec = layout.planets.find((p) => p.repo.name === focus.name)
       if (!spec) return
